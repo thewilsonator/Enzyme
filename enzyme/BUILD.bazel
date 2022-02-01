@@ -1,0 +1,23 @@
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+
+LLVM_DIR = "/Users/tim/Developer/llvm-project/build/lib/cmake/llvm"
+LLVM_EXTERNAL_LIT = "/opt/homebrew/bin/lit"
+
+filegroup(
+    name = "sources",
+    srcs = ["CMakeLists.txt"] + glob(["Enzyme/**", "BCLoad/**", "bclib/**", "test/**", "benchmarks/**", "cmake/**"]),
+)
+
+cmake(
+    name = "Enzyme",
+    cache_entries = {
+        "LLVM_EXTERNAL_LIT": LLVM_EXTERNAL_LIT,
+        "LLVM_DIR": LLVM_DIR,
+    },
+    lib_source = ":sources",
+    out_shared_libs = select({
+        "@platforms//os:osx": ["LLVMEnzyme-12.dylib", "ClangEnzyme-12.dylib"],
+        "@platforms//os:windows": ["LLVMEnzyme-12.dll", "ClangEnzyme-12.dll"],
+        "@platforms//os:linux": ["LLVMEnzyme-12.so", "ClangEnzyme-12.so"],
+    }),
+)
