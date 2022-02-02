@@ -2,7 +2,7 @@ load("@llvm-raw//utils/bazel/llvm-project-overlay/llvm:cc_plugin_library.bzl", "
 
 
 cc_plugin_library(
-    name = "LLVMEnzyme",
+    name = "LLVMEnzyme22222",
     srcs = glob(["**/*.cpp"]),
     hdrs = glob(["**/*.h"]),
     deps = [
@@ -11,4 +11,17 @@ cc_plugin_library(
         "@llvm-project//llvm:Support",
         "@llvm-project//llvm:config",
         ],
+)
+
+cc_library(
+    name = "LLVMEnzyme",
+    deps = [
+        "@llvm-project//llvm:Analysis",
+        "@llvm-project//llvm:Core",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//llvm:Scalar",
+        "@llvm-project//llvm:config",
+        ],
+    srcs = glob(["**/*.cpp"]),
+    hdrs = glob(["**/*.h"]),
 )
