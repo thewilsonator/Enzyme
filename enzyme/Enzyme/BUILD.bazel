@@ -1,27 +1,75 @@
-load("@llvm-raw//utils/bazel/llvm-project-overlay/llvm:cc_plugin_library.bzl", "cc_plugin_library")
+load("//Enzyme:replace.bzl", "replace")
+
+replace(
+    name = "ScalarEvolution",
+    template = "@llvm-project//llvm:include/llvm/Analysis/ScalarEvolution.h",
+    output_file = "SCEV/ScalarEvolution.h",
+    substitutions = { "private": "public" },
+)
 
 
-cc_plugin_library(
-    name = "LLVMEnzyme22222",
-    srcs = glob(["**/*.cpp"]),
-    hdrs = glob(["**/*.h"]),
-    deps = [
-        "@llvm-project//llvm:Analysis",
-        "@llvm-project//llvm:Core",
-        "@llvm-project//llvm:Support",
-        "@llvm-project//llvm:config",
-        ],
+replace(
+    name = "TargetLibraryInfo",
+    template = "@llvm-project//llvm:include/llvm/Analysis/TargetLibraryInfo.h",
+    output_file = "SCEV/TargetLibraryInfo.h",
+    substitutions = { 
+        "class TargetLibraryInfo {": "class TargetLibraryInfo { public:"
+    },
+)
+
+# TODO: select based on LLVM version (assuming llvm 12 right now)
+
+replace(
+    name = "ScalarEvolutionExpander",
+    template = "@llvm-project//llvm:include/llvm/Transforms/Utils/ScalarEvolutionExpander.h",
+    output_file = "SCEV/ScalarEvolutionExpander.h",
+    substitutions = { 
+        # "#define LLVM_ANALYSIS_SCALAREVOLUTIONEXPANDER_H": "#define LLVM_ANALYSIS_SCALAREVOLUTIONEXPANDER_H\n#include \"SCEV/ScalarEvolution.h\"",
+        # "LLVM_ANALYSIS": "FAKELLVM_ANALYSIS",
+        # "class SCEVExpander ": "namespace fake {\n  class SCEVExpander ",
+        # "struct SCEVOperand ": "namespace fake {\n  struct SCEVOperand ",
+        # "};\n}": "};\n}}",
+        # "const SCEV* S;\n};\n": "const SCEV* S;\n};\n}\n",
+    },
 )
 
 cc_library(
-    name = "LLVMEnzyme",
+  name = "PatchedLLVMHeaders",
+  hdrs = [":ScalarEvolution", ":TargetLibraryInfo", ":ScalarEvolutionExpander"],
+  include_prefix = ".", 
+)
+
+cc_binary(
+    name = "LLVMEnzyme.dylib",
     deps = [
         "@llvm-project//llvm:Analysis",
         "@llvm-project//llvm:Core",
         "@llvm-project//llvm:Support",
+        "@llvm-project//llvm:CodeGen",
+        "@llvm-project//llvm:Option",
         "@llvm-project//llvm:Scalar",
-        "@llvm-project//llvm:config",
+        "@llvm-project//llvm:Passes",
+        "//Enzyme:PatchedLLVMHeaders",
         ],
-    srcs = glob(["**/*.cpp"]),
-    hdrs = glob(["**/*.h"]),
+    srcs = glob(["*.cpp", "*.h", "SCEV/ScalarEvolutionExpander.cpp", "TypeAnalysis/*.cpp", "TypeAnalysis/*.h"]),
+    linkshared = True,
+    linkstatic = False,
 )
+
+
+# cc_library(
+#     name = "LLVMEnzyme",
+#     implementation_deps = [
+#         "@llvm-project//llvm:Analysis",
+#         "@llvm-project//llvm:Support",
+#         "@llvm-project//llvm:CodeGen",
+#         "@llvm-project//llvm:Core",
+#         "@llvm-project//llvm:Option",
+#         "@llvm-project//llvm:Scalar",
+#         "@llvm-project//llvm:Passes",
+#         ],
+#     deps = ["//Enzyme:PatchedLLVMHeaders"],
+#     srcs = glob(["*.cpp", "*.h", "SCEV/ScalarEvolutionExpander.cpp", "TypeAnalysis/*.cpp", "TypeAnalysis/*.h"]),
+#     hdrs = glob(["CApi.h"]),
+#     linkstatic = False,
+# )
