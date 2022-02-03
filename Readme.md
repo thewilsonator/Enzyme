@@ -29,6 +29,13 @@ cmake -G Ninja .. -DLLVM_DIR=/path/to/llvm/lib/cmake/llvm -DLLVM_EXTERNAL_LIT=/p
 ninja
 ```
 
+or using Bazel:
+```
+cd /path/to/Enzyme/enzyme
+bazel build --config=generic_clang //Enzyme:LLVMEnzyme
+```
+
+
 Or, install Enzyme using a package manager:
 
 [Homebrew](https://brew.sh)

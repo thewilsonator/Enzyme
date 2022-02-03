@@ -31,11 +31,11 @@ build:terminfo_system --repo_env=BAZEL_LLVM_TERMINFO_STRATEGY=system
 # Set the default compiler to the `clang` binary on the `PATH`.
 build:generic_clang --repo_env=CC=clang
 
-# C++14 standard version is required.
-build:generic_clang --cxxopt=-std=c++14 --host_cxxopt=-std=c++14
+# C++17 standard version is required.
+build:generic_clang --cxxopt=-std=c++17 --host_cxxopt=-std=c++17
 
-# Use `-Wall` and `-Werror` for Clang.
-build:generic_clang --copt=-Wall --copt=-Werror --host_copt=-Wall --host_copt=-Werror
+# Use `-Wall` for Clang.
+build:generic_clang --copt=-Wall --host_copt=-Wall
 
 # The Clang available on MacOS has a warning that isn't clean on MLIR code. The
 # warning doesn't show up with more recent Clangs, so just disable for now.
@@ -44,6 +44,10 @@ build:generic_clang --cxxopt=-Wno-range-loop-analysis --host_cxxopt=-Wno-range-l
 # Build errors are not a helpful way to enforce deprecation in-repo and it is
 # not the point of the Bazel build to catch usage of deprecated APIs.
 build:generic_clang --copt=-Wno-deprecated --host_copt=-Wno-deprecated
+
+build:generic_clang --copt=-fPIC --host_copt=-fPIC
+
+build:generic_clang --cxxopt=-fno-rtti --host_cxxopt=-fno-rtti
 
 ###############################################################################
 # Options for "generic_gcc" builds: these options should generally apply to
@@ -57,7 +61,7 @@ build:generic_clang --copt=-Wno-deprecated --host_copt=-Wno-deprecated
 build:generic_gcc --repo_env=CC=gcc
 
 # C++14 standard version is required.
-build:generic_gcc --cxxopt=-std=c++14 --host_cxxopt=-std=c++14
+build:generic_gcc --cxxopt=-std=c++17 --host_cxxopt=-std=c++17
 
 # Build errors are not a helpful way to enforce deprecation in-repo and it is
 # not the point of the Bazel build to catch usage of deprecated APIs.
@@ -71,8 +75,9 @@ build:generic_gcc --cxxopt=-Wno-class-memaccess --host_cxxopt=-Wno-class-memacce
 build:generic_gcc --copt=-Wno-maybe-uninitialized --host_copt=-Wno-maybe-uninitialized
 build:generic_gcc --copt=-Wno-misleading-indentation --host_copt=-Wno-misleading-indentation
 
-# Use `-Werror` for GCC to make sure warnings don't slip past.
-build:generic_gcc --copt=-Werror --host_copt=-Werror
+build:generic_gcc --copt=-fPIC --host_copt=-fPIC
+
+build:generic_gcc --cxxopt=-fno-rtti --host_cxxopt=-fno-rtti
 
 ###############################################################################
 # Generic Windows flags common to both MSVC and Clang.
@@ -124,7 +129,6 @@ build:clang-cl --compiler=clang-cl
 # Use Clang's internal warning flags instead of the ones that sometimes map
 # through to MSVC's flags.
 build:clang-cl --copt=/clang:-Wall --host_copt=/clang:-Wall
-build:clang-cl --copt=/clang:-Werror --host_copt=/clang:-Werror
 
 # This doesn't appear to be enforced by any upstream bot.
 build:clang-cl --copt=/clang:-Wno-unused --host_copt=/clang:-Wno-unused
