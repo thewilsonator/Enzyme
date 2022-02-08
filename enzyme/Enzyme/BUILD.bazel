@@ -45,13 +45,15 @@ cc_binary(
         "@llvm-project//llvm:Analysis",
         "@llvm-project//llvm:Core",
         "@llvm-project//llvm:Support",
+        "@llvm-project//llvm:CodeGen",
+        "@llvm-project//llvm:Option",
         "@llvm-project//llvm:Scalar",
         "@llvm-project//llvm:Passes",
-        "@llvm-project//llvm:config",
         "//Enzyme:PatchedLLVMHeaders",
         ],
     srcs = glob(["*.cpp", "*.h", "SCEV/ScalarEvolutionExpander.cpp", "TypeAnalysis/*.cpp", "TypeAnalysis/*.h"]),
     linkshared = True,
+    linkstatic = False,
 )
 
 
@@ -59,14 +61,15 @@ cc_binary(
 #     name = "LLVMEnzyme",
 #     implementation_deps = [
 #         "@llvm-project//llvm:Analysis",
-#         "@llvm-project//llvm:Core",
 #         "@llvm-project//llvm:Support",
+#         "@llvm-project//llvm:CodeGen",
+#         "@llvm-project//llvm:Core",
+#         "@llvm-project//llvm:Option",
 #         "@llvm-project//llvm:Scalar",
 #         "@llvm-project//llvm:Passes",
-#         "@llvm-project//llvm:config",
 #         ],
 #     deps = ["//Enzyme:PatchedLLVMHeaders"],
 #     srcs = glob(["*.cpp", "*.h", "SCEV/ScalarEvolutionExpander.cpp", "TypeAnalysis/*.cpp", "TypeAnalysis/*.h"]),
 #     hdrs = glob(["CApi.h"]),
-#     linkshared = True,
+#     linkstatic = False,
 # )
