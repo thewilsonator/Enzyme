@@ -223,3 +223,28 @@ install(FILES
 install(EXPORT EnzymeTargets DESTINATION
     "${INSTALL_CMAKE_DIR}" COMPONENT dev)
    
+
+
+
+option(TEST_SUITE_USE_IR_PGO
+  "Use IR PGO instrumentation (requires TEST_SUITE_PROFILE_GENERATE)" OFF)
+
+# Enable profile generate mode in lit. Note that this does not automatically
+# add something like -fprofile-instr-generate to the compiler flags.
+option(TEST_SUITE_PROFILE_GENERATE "Enable lit profile generate mode" OFF)
+# Set value to python style True/False
+if(TEST_SUITE_PROFILE_GENERATE)
+  set(TEST_SUITE_LLVM_PROFDATA "/Users/tim/Developer/llvm-project/build/bin/llvm-profdata")
+  set(TEST_SUITE_PROFILE_GENERATE "True")
+
+  set(profile_instrumentation_flags -fprofile-instr-generate)
+  if(TEST_SUITE_USE_IR_PGO)
+    set(profile_instrumentation_flags -fprofile-generate)
+  endif()
+
+  list(APPEND CFLAGS   ${profile_instrumentation_flags})
+  list(APPEND CXXFLAGS ${profile_instrumentation_flags})
+  list(APPEND LDFLAGS  ${profile_instrumentation_flags})
+else()
+  set(TEST_SUITE_PROFILE_GENERATE "False")
+endif()

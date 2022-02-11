@@ -14,3 +14,5 @@ if (${Clang_FOUND})
 add_subdirectory(Integration)
 endif()
 add_subdirectory(BCLoader)
+
+add_subdirectory(litsupport)

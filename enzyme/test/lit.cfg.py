@@ -4,10 +4,15 @@ import os
 import platform
 import re
 import subprocess
+import site
 
 import lit.formats
 import lit.util
 from lit.llvm import llvm_config
+
+# Load test-suite litsupport code
+site.addsitedir(os.path.dirname(__file__))
+import litsupport.test
 
 # Configuration file for the 'lit' test runner.
 
@@ -19,8 +24,7 @@ config.name = 'Enzyme'
 # For now we require '&&' between commands, until they get globally killed and
 # the test runner updated.
 execute_external = platform.system() != 'Windows'
-config.test_format = lit.formats.ShTest(execute_external)
-
+config.test_format = litsupport.test.TestSuiteTest()
 # suffixes: A list of file extensions to treat as test files.
 config.suffixes = ['.ll', '.c', '.cpp', '.cu']
 

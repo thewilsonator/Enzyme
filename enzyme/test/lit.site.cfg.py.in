@@ -57,5 +57,11 @@ config.substitutions.append(('%loadClangEnzyme', ''
                                  + ' -Xclang -load -Xclang @ENZYME_BINARY_DIR@/Enzyme/ClangEnzyme-' + config.llvm_ver + config.llvm_shlib_ext
                                  ))
 
+
+
+config.profile_generate = True
+config.llvm_profdata = "/Users/tim/Developer/llvm-project/build/bin/llvm-profdata"
+config.test_modules = "run;codesize;hash;compiletime;timeit;profilegen".split(';')
+
 # Let the main config do the real work.
 lit_config.load_config(config, "@ENZYME_SOURCE_DIR@/test/lit.cfg.py")
