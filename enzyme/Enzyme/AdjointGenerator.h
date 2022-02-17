@@ -756,22 +756,26 @@ public:
     auto align = SI.getAlignment();
 #endif
 
-    visitCommonStore(SI, SI.getPointerOperand(), SI.getValueOperand(), align,
-                     SI.isVolatile(), SI.getOrdering(), SI.getSyncScopeID(),
+    auto &DL = gutils->newFunc->getParent()->getDataLayout();
+    auto store_size = DL.getTypeSizeInBits(SI.getValueOperand()->getType()) / 8;
+
+    visitCommonStore(SI, SI.getPointerOperand(), SI.getValueOperand(),
+                     store_size, align, SI.isVolatile(), SI.getOrdering(),
+                     SI.getSyncScopeID(),
                      /*mask=*/nullptr);
     eraseIfUnused(SI);
   }
 
 #if LLVM_VERSION_MAJOR >= 10
   void visitCommonStore(llvm::Instruction &I, Value *orig_ptr, Value *orig_val,
-                        MaybeAlign align, bool isVolatile,
-                        AtomicOrdering ordering, SyncScope::ID syncScope,
-                        Value *mask)
+                        unsigned long store_size, MaybeAlign align,
+                        bool isVolatile, AtomicOrdering ordering,
+                        SyncScope::ID syncScope, Value *mask)
 #else
   void visitCommonStore(llvm::Instruction &I, Value *orig_ptr, Value *orig_val,
-                        unsigned align, bool isVolatile,
-                        AtomicOrdering ordering, SyncScope::ID syncScope,
-                        Value *mask)
+                        unsigned long store_size, unsigned align,
+                        bool isVolatile, AtomicOrdering ordering,
+                        SyncScope::ID syncScope, Value *mask)
 #endif
   {
     Value *val = gutils->getNewFromOriginal(orig_val);
@@ -792,7 +796,7 @@ public:
 
     // TODO allow recognition of other types that could contain pointers [e.g.
     // {void*, void*} or <2 x i64> ]
-    auto storeSize = DL.getTypeSizeInBits(valType) / 8;
+    auto storeSize = store_size;
 
     //! Storing a floating point value
     Type *FT = nullptr;
@@ -2538,81 +2542,42 @@ public:
   }
 
   void visitMemSetInst(llvm::MemSetInst &MS) {
-    eraseIfUnused(MS);
-
-    Value *orig_op0 = MS.getOperand(0);
-    Value *orig_op1 = MS.getOperand(1);
-
     // TODO this should 1) assert that the value being meset is constant
     //                 2) duplicate the memset for the inverted pointer
 
-    if (gutils->isConstantInstruction(&MS) &&
-        Mode != DerivativeMode::ForwardMode) {
+    if (unnecessaryStores.count(&MS)) {
+      eraseIfUnused(MS);
       return;
     }
 
-    // If constant destination then no operation needs doing
-    if (gutils->isConstantValue(orig_op0)) {
+    if (gutils->isConstantValue(MS.getOperand(0))) {
+      eraseIfUnused(MS);
       return;
     }
 
-    if (!gutils->isConstantValue(orig_op1)) {
+    if (!gutils->isConstantValue(MS.getOperand(1))) {
       llvm::errs() << "couldn't handle non constant inst in memset to "
                       "propagate differential to\n"
                    << MS;
       report_fatal_error("non constant in memset");
     }
+    Value *new_size = MS.getOperand(2);
 
-    bool backwardsShadow = false;
-    bool forwardsShadow = true;
-    for (auto pair : gutils->backwardsOnlyShadows) {
-      if (pair.second.stores.count(&MS)) {
-        backwardsShadow = true;
-        forwardsShadow = pair.second.primalInitialize;
-        if (auto inst = dyn_cast<Instruction>(pair.first))
-          if (!forwardsShadow && pair.second.LI &&
-              pair.second.LI->contains(inst->getParent()))
-            backwardsShadow = false;
-      }
+    size_t size = 1;
+    if (auto ci = dyn_cast<ConstantInt>(new_size)) {
+      size = ci->getLimitedValue();
     }
 
-    if ((Mode == DerivativeMode::ReverseModePrimal && forwardsShadow) ||
-        (Mode == DerivativeMode::ReverseModeGradient && backwardsShadow) ||
-        (Mode == DerivativeMode::ReverseModeCombined &&
-         (forwardsShadow && backwardsShadow)) ||
-        Mode == DerivativeMode::ForwardMode) {
-      IRBuilder<> BuilderZ(&MS);
-      getForwardBuilder(BuilderZ);
+    auto align0 = cast<ConstantInt>(MS.getOperand(2))->getZExtValue();
+#if LLVM_VERSION_MAJOR >= 10
+    auto align = MaybeAlign(align0);
+#else
+    auto align = align0;
+#endif
 
-      bool forwardMode = Mode == DerivativeMode::ForwardMode;
-
-      Value *op0 = gutils->invertPointerM(orig_op0, BuilderZ);
-      Value *op1 = gutils->getNewFromOriginal(MS.getOperand(1));
-      if (!forwardMode)
-        op1 = gutils->lookupM(op1, BuilderZ);
-      Value *op2 = gutils->getNewFromOriginal(MS.getOperand(2));
-      if (!forwardMode)
-        op2 = gutils->lookupM(op2, BuilderZ);
-      Value *op3 = gutils->getNewFromOriginal(MS.getOperand(3));
-      if (!forwardMode)
-        op3 = gutils->lookupM(op3, BuilderZ);
-
-      Type *tys[] = {op0->getType(), op2->getType()};
-      Value *args[] = {op0, op1, op2, op3};
-      auto Defs =
-          gutils->getInvertedBundles(&MS,
-                                     {ValueType::Shadow, ValueType::Primal,
-                                      ValueType::Primal, ValueType::Primal},
-                                     BuilderZ, /*lookup*/ false);
-      auto cal = BuilderZ.CreateCall(
-          Intrinsic::getDeclaration(MS.getParent()->getParent()->getParent(),
-                                    Intrinsic::memset, tys),
-          args, Defs);
-      cal->copyMetadata(MS, MD_ToCopy);
-      cal->setAttributes(MS.getAttributes());
-      cal->setCallingConv(MS.getCallingConv());
-      cal->setTailCallKind(MS.getTailCallKind());
-    }
+    visitCommonStore(MS, MS.getOperand(0), MS.getOperand(1), size, align,
+                     MS.isVolatile(), llvm::AtomicOrdering::NotAtomic,
+                     SyncScope::System, nullptr);
   }
 
   void visitMemTransferInst(llvm::MemTransferInst &MTI) {
@@ -2932,8 +2897,12 @@ public:
 #else
       auto align = align0;
 #endif
+
+      auto &DL = gutils->newFunc->getParent()->getDataLayout();
+      auto store_size = DL.getTypeSizeInBits(I.getOperand(0)->getType()) / 8;
+
       visitCommonStore(I, /*orig_ptr*/ I.getOperand(1),
-                       /*orig_val*/ I.getOperand(0), align,
+                       /*orig_val*/ I.getOperand(0), store_size, align,
                        /*isVolatile*/ false, llvm::AtomicOrdering::NotAtomic,
                        SyncScope::SingleThread,
                        /*mask*/ gutils->getNewFromOriginal(I.getOperand(3)));
