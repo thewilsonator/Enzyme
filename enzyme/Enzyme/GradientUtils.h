@@ -147,6 +147,7 @@ public:
   EnzymeLogic &Logic;
   bool AtomicAdd;
   DerivativeMode mode;
+  VectorModeMemoryLayout memoryLayout;
   llvm::Function *oldFunc;
   llvm::ValueMap<const Value *, InvertedPointerVH> invertedPointers;
   DominatorTree &OrigDT;
@@ -1178,9 +1179,10 @@ public:
                 const SmallPtrSetImpl<Value *> &activevals_,
                 DIFFE_TYPE ReturnActivity, ArrayRef<DIFFE_TYPE> ArgDiffeTypes_,
                 ValueToValueMapTy &originalToNewFn_, DerivativeMode mode,
+                VectorModeMemoryLayout memoryLayout,
                 unsigned width, bool omp)
       : CacheUtility(TLI_, newFunc_), Logic(Logic), mode(mode),
-        oldFunc(oldFunc_), invertedPointers(),
+        memoryLayout(memoryLayout), oldFunc(oldFunc_), invertedPointers(),
         OrigDT(Logic.PPC.FAM.getResult<llvm::DominatorTreeAnalysis>(*oldFunc_)),
         OrigPDT(Logic.PPC.FAM.getResult<llvm::PostDominatorTreeAnalysis>(
             *oldFunc_)),
@@ -1261,9 +1263,9 @@ public:
                                 bool *shadowReturnUsedP);
 
   static GradientUtils *
-  CreateFromClone(EnzymeLogic &Logic, unsigned width, Function *todiff,
-                  TargetLibraryInfo &TLI, TypeAnalysis &TA,
-                  FnTypeInfo &oldTypeInfo, DIFFE_TYPE retType,
+  CreateFromClone(EnzymeLogic &Logic, VectorModeMemoryLayout memoryLayout,
+                  unsigned width, Function *todiff, TargetLibraryInfo &TLI,
+                  TypeAnalysis &TA, FnTypeInfo &oldTypeInfo, DIFFE_TYPE retType,
                   ArrayRef<DIFFE_TYPE> constant_args, bool returnUsed,
                   bool shadowReturnUsed,
                   std::map<AugmentedStruct, int> &returnMapping, bool omp);
@@ -1813,17 +1815,17 @@ public:
   Value *invertPointerM(Value *val, IRBuilder<> &BuilderM,
                         bool nullShadow = false);
 
-  static Constant *GetOrCreateShadowConstant(EnzymeLogic &Logic,
-                                             TargetLibraryInfo &TLI,
-                                             TypeAnalysis &TA, Constant *F,
-                                             DerivativeMode mode,
-                                             unsigned width, bool AtomicAdd);
+  static Constant *
+  GetOrCreateShadowConstant(EnzymeLogic &Logic, TargetLibraryInfo &TLI,
+                            TypeAnalysis &TA, Constant *F, DerivativeMode mode,
+                            VectorModeMemoryLayout memoryLayout, unsigned width,
+                            bool AtomicAdd);
 
-  static Constant *GetOrCreateShadowFunction(EnzymeLogic &Logic,
-                                             TargetLibraryInfo &TLI,
-                                             TypeAnalysis &TA, Function *F,
-                                             DerivativeMode mode,
-                                             unsigned width, bool AtomicAdd);
+  static Constant *
+  GetOrCreateShadowFunction(EnzymeLogic &Logic, TargetLibraryInfo &TLI,
+                            TypeAnalysis &TA, Function *F, DerivativeMode mode,
+                            VectorModeMemoryLayout memoryLayout, unsigned width,
+                            bool AtomicAdd);
 
   void branchToCorrespondingTarget(
       BasicBlock *ctx, IRBuilder<> &BuilderM,
@@ -1868,17 +1870,70 @@ public:
     Builder2.setFastMathFlags(getFast());
   }
 
-  static Type *getShadowType(Type *ty, unsigned width) {
-    if (width > 1) {
-      if (ty->isVoidTy())
-        return ty;
-      return ArrayType::get(ty, width);
+  static Type *getShadowTypeVectorizedAtLeafNodes(Type *ty, unsigned width) {
+    static std::map<Type *, Type *> visited;
+
+    if (auto sty = dyn_cast<StructType>(ty)) {
+
+      auto found = visited.find(sty);
+      if (found != visited.end())
+        return found->second;
+
+      StructType *new_sty = StructType::create(ty->getContext());
+      SmallVector<Type *, 3> subtys;
+
+      visited[sty] = new_sty;
+
+      for (auto sety : sty->subtypes()) {
+        Type *subty = getShadowTypeVectorizedAtLeafNodes(sety, width);
+        subtys.push_back(subty);
+      }
+
+      if (sty->hasName()) {
+        auto name = sty->getName() + ".Vec." + Twine(width);
+        new_sty->setBody(subtys);
+        new_sty->setName(name.str());
+        return new_sty;
+      } else {
+        visited.erase(sty);
+        return StructType::get(sty->getContext(), subtys);
+      }
+    } else if (auto aty = dyn_cast<ArrayType>(ty)) {
+      return ArrayType::get(
+          getShadowTypeVectorizedAtLeafNodes(aty->getElementType(), width),
+          aty->getNumElements());
+    } else if (auto pty = dyn_cast<PointerType>(ty)) {
+      return PointerType::get(
+          getShadowTypeVectorizedAtLeafNodes(pty->getElementType(), width),
+          pty->getAddressSpace());
     } else {
-      return ty;
+      return ArrayType::get(ty, width);
     }
   }
 
-  Type *getShadowType(Type *ty) { return getShadowType(ty, width); }
+  static Type *getShadowTypeVectorizedAtRootNode(Type *ty, unsigned width) {
+    return ArrayType::get(ty, width);
+  }
+
+  static Type *getShadowType(Type *ty, unsigned width,
+                             VectorModeMemoryLayout memoryLayout) {
+    if (width == 1)
+      return ty;
+
+    if (ty->isVoidTy())
+      return ty;
+
+    switch (memoryLayout) {
+    case VectorModeMemoryLayout::VectorizeAtRootNode:
+      return getShadowTypeVectorizedAtRootNode(ty, width);
+    case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+      return getShadowTypeVectorizedAtLeafNodes(ty, width);
+    }
+  }
+
+  Type *getShadowType(Type *ty) {
+    return getShadowType(ty, width, memoryLayout);
+  }
 
   static inline Value *extractMeta(IRBuilder<> &Builder, Value *Agg,
                                    unsigned off) {
@@ -1981,10 +2036,11 @@ class DiffeGradientUtils : public GradientUtils {
                      DIFFE_TYPE ActiveReturn,
                      ArrayRef<DIFFE_TYPE> constant_values,
                      ValueToValueMapTy &origToNew_, DerivativeMode mode,
+                     VectorModeMemoryLayout memoryLayout,
                      unsigned width, bool omp)
       : GradientUtils(Logic, newFunc_, oldFunc_, TLI, TA, TR, invertedPointers_,
                       constantvalues_, returnvals_, ActiveReturn,
-                      constant_values, origToNew_, mode, width, omp) {
+                      constant_values, origToNew_, mode, memoryLayout, width, omp) {
     assert(reverseBlocks.size() == 0);
     if (mode == DerivativeMode::ForwardMode ||
         mode == DerivativeMode::ForwardModeSplit) {
@@ -2006,7 +2062,8 @@ public:
   bool FreeMemory;
   ValueMap<const Value *, TrackingVH<AllocaInst>> differentials;
   static DiffeGradientUtils *
-  CreateFromClone(EnzymeLogic &Logic, DerivativeMode mode, unsigned width,
+  CreateFromClone(EnzymeLogic &Logic, DerivativeMode mode,
+                  VectorModeMemoryLayout memoryLayout, unsigned width,
                   Function *todiff, TargetLibraryInfo &TLI, TypeAnalysis &TA,
                   FnTypeInfo &oldTypeInfo, DIFFE_TYPE retType,
                   bool diffeReturnArg, ArrayRef<DIFFE_TYPE> constant_args,
