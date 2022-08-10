@@ -109,6 +109,49 @@ struct InvertedPointerConfig : ValueMapConfig<const llvm::Value *> {
   static void onDelete(ExtraData gutils, const llvm::Value *old);
 };
 
+//class EnzymeValue {
+//public:
+//  Value *value;
+//
+//  EnzymeValue(Value *value) : value(value) {}
+//
+
+
+//};
+
+class Primal {
+private:
+  Value *value;
+public:
+  bool extractMeta = false;
+  
+  Primal(Value *value) : value(value) {}
+
+  Value* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
+    switch (memoryLayout) {
+      case VectorModeMemoryLayout::VectorizeAtRootNode:
+        return this->value;
+      case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+        return Builder.CreateVectorSplat(width, this->value);
+    }
+  }
+};
+
+class Gradient {
+private:
+  Value *value;
+public:
+  bool extractMeta = true;
+  Gradient(Value *value) : value(value) {}
+  
+  Value* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
+        if (value)
+          assert(cast<ArrayType>(value->getType())->getNumElements() == width);
+    
+      return this->value;
+    }
+};
+
 class InvertedPointerVH : public llvm::CallbackVH {
 public:
   GradientUtils *gutils;
@@ -1390,7 +1433,7 @@ public:
       idx++;
     };
 
-    applyChainRule(BuilderM, rule, ptr, newval);
+    applyChainRule(BuilderM, rule, Gradient(ptr), Gradient(newval));
   }
 
 private:
@@ -1907,7 +1950,7 @@ public:
           getShadowTypeVectorizedAtLeafNodes(pty->getElementType(), width),
           pty->getAddressSpace());
     } else {
-      return ArrayType::get(ty, width);
+      return VectorType::get(ty, width, false);
     }
   }
 
@@ -1947,32 +1990,40 @@ public:
     }
     return Builder.CreateExtractValue(Agg, {off});
   }
+  
+  template<typename T, typename Seq>
+  struct expander;
 
-  /// Unwraps a vector derivative from its internal representation and applies a
+  template<typename T, std::size_t... Is>
+  struct expander<T, std::index_sequence<Is...>> {
+      template<typename E, std::size_t>
+      using elem = E;
+
+      using type = std::tuple<elem<T, Is>...>;
+  };
+
+    /// Unwraps a vector derivative from its internal representation and applies a
   /// function f to each element. Return values of f are collected and wrapped.
   template <typename Func, typename... Args>
   Value *applyChainRule(Type *diffType, IRBuilder<> &Builder, Func rule,
                         Args... args) {
-    if (width > 1) {
-      const int size = sizeof...(args);
-      Value *vals[size] = {args...};
+    unsigned actualWidth = memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes ? 1 : width;
 
-      for (size_t i = 0; i < size; ++i)
-        if (vals[i])
-          assert(cast<ArrayType>(vals[i]->getType())->getNumElements() ==
-                 width);
-
+    if (actualWidth > 1) {
+      constexpr int size = sizeof...(args);
+      
       Type *wrappedType = ArrayType::get(diffType, width);
       Value *res = UndefValue::get(wrappedType);
-      for (unsigned int i = 0; i < getWidth(); ++i) {
-        auto tup = std::tuple<Args...>{
-            (args ? extractMeta(Builder, args, i) : nullptr)...};
+      for (unsigned int i = 0; i < actualWidth; ++i) {
+        using TupelType = typename expander<Value*, std::make_index_sequence<size>>::type;
+        auto tup = TupelType {
+          (args.getValue(Builder, memoryLayout, width) != nullptr ? args.extractMeta ? extractMeta(Builder, args.getValue(Builder, memoryLayout, width), i) : args.getValue(Builder, memoryLayout, width) : nullptr)...};
         auto diff = std::apply(rule, std::move(tup));
         res = Builder.CreateInsertValue(res, diff, {i});
       }
       return res;
     } else {
-      return rule(args...);
+      return rule(args.getValue(Builder, memoryLayout, width)...);
     }
   }
 
@@ -1980,22 +2031,19 @@ public:
   /// function f to each element. Return values of f are collected and wrapped.
   template <typename Func, typename... Args>
   void applyChainRule(IRBuilder<> &Builder, Func rule, Args... args) {
-    if (width > 1) {
-      const int size = sizeof...(args);
-      Value *vals[size] = {args...};
+    unsigned actualWidth = memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes ? 1 : width;
+    
+    if (actualWidth > 1) {
+      constexpr int size = sizeof...(args);
 
-      for (size_t i = 0; i < size; ++i)
-        if (vals[i])
-          assert(cast<ArrayType>(vals[i]->getType())->getNumElements() ==
-                 width);
-
-      for (unsigned int i = 0; i < getWidth(); ++i) {
-        auto tup = std::tuple<Args...>{
-            (args ? extractMeta(Builder, args, i) : nullptr)...};
+      for (unsigned int i = 0; i < actualWidth; ++i) {
+        using TupelType = typename expander<Value*, std::make_index_sequence<size>>::type;
+        auto tup = TupelType {
+          (args.getValue(Builder, memoryLayout, width) != nullptr ? args.extractMeta ? extractMeta(Builder, args.getValue(Builder, memoryLayout, width), i) : args.getValue(Builder, memoryLayout, width) : nullptr)...};
         std::apply(rule, std::move(tup));
       }
     } else {
-      rule(args...);
+      rule(args.getValue(Builder, memoryLayout, width)...);
     }
   }
 
@@ -2004,14 +2052,16 @@ public:
   template <typename Func>
   Value *applyChainRule(Type *diffType, ArrayRef<Constant *> diffs,
                         IRBuilder<> &Builder, Func rule) {
-    if (width > 1) {
+    unsigned actualWidth = memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes ? 1 : width;
+
+    if (actualWidth > 1) {
       for (auto diff : diffs) {
         assert(diff);
         assert(cast<ArrayType>(diff->getType())->getNumElements() == width);
       }
       Type *wrappedType = ArrayType::get(diffType, width);
       Value *res = UndefValue::get(wrappedType);
-      for (unsigned int i = 0; i < getWidth(); ++i) {
+      for (unsigned int i = 0; i < actualWidth; ++i) {
         SmallVector<Constant *, 3> extracted_diffs;
         for (auto diff : diffs) {
           extracted_diffs.push_back(
@@ -2553,7 +2603,7 @@ public:
           PointerType::get(
               addingType,
               cast<PointerType>(origptr->getType())->getAddressSpace()),
-          BuilderM, rule, ptr);
+          BuilderM, rule, Gradient(ptr));
     }
 
     if (start != 0 ||
@@ -2608,7 +2658,7 @@ public:
         }
         return dif;
       };
-      dif = applyChainRule(addingType, BuilderM, rule, dif);
+      dif = applyChainRule(addingType, BuilderM, rule, Gradient(dif));
     }
 
     auto TmpOrig =
@@ -2646,7 +2696,7 @@ public:
                                               PointerType::get(addingType, 1));
         };
         ptr = applyChainRule(PointerType::get(addingType, 1), BuilderM, rule,
-                             ptr);
+                             Gradient(ptr));
       }
 
       assert(!mask);
@@ -2721,7 +2771,7 @@ public:
 #endif
           }
         };
-        applyChainRule(BuilderM, rule, dif, ptr);
+        applyChainRule(BuilderM, rule, Gradient(dif), Gradient(ptr));
       } else {
         auto rule = [&](Value *dif, Value *ptr) {
 #if LLVM_VERSION_MAJOR >= 13
@@ -2757,7 +2807,7 @@ public:
                                    SyncScope::System);
 #endif
         };
-        applyChainRule(BuilderM, rule, dif, ptr);
+        applyChainRule(BuilderM, rule, Gradient(dif), Gradient(ptr));
       }
 #else
       llvm::errs() << "unhandled atomic fadd on llvm version " << *ptr << " "
@@ -2834,7 +2884,7 @@ public:
           }
         }
       };
-      applyChainRule(BuilderM, rule, ptr, dif);
+      applyChainRule(BuilderM, rule, Gradient(ptr), Gradient(dif));
     } else {
       Type *tys[] = {addingType, origptr->getType()};
       auto LF = Intrinsic::getDeclaration(oldFunc->getParent(),
@@ -2863,7 +2913,7 @@ public:
         Value *sargs[] = {res, ptr, alignv, mask};
         BuilderM.CreateCall(SF, sargs);
       };
-      applyChainRule(BuilderM, rule, ptr, dif);
+      applyChainRule(BuilderM, rule, Gradient(ptr), Gradient(dif));
     }
   }
 };
@@ -2876,4 +2926,6 @@ void SubTransferHelper(GradientUtils *gutils, DerivativeMode Mode,
                        llvm::CallInst *MTI, bool allowForward = true,
                        bool shadowsLookedUp = false,
                        bool backwardsShadow = false);
+
 #endif
+

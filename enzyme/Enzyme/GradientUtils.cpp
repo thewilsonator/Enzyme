@@ -900,7 +900,7 @@ Value *GradientUtils::unwrapM(Value *const val, IRBuilder<> &BuilderM,
                                     dli->getMetadata(LLVMContext::MD_tbaa));
               return toreturn;
             },
-            pidx);
+                                         Gradient(pidx));
 
         // TODO adding to cache only legal if no alias of any future writes
         if (permitCache)
@@ -2799,7 +2799,7 @@ BasicBlock *GradientUtils::getReverseOrLatchMerge(BasicBlock *BB,
                       };
 
                       Value *replacement = applyChainRule(
-                          Type::getInt8Ty(orig->getContext()), NB, rule, anti);
+                          Type::getInt8Ty(orig->getContext()), NB, rule, Gradient(anti));
 
                       replaceAWithB(cast<Instruction>(anti), replacement);
                       erase(cast<Instruction>(anti));
@@ -2811,7 +2811,7 @@ BasicBlock *GradientUtils::getReverseOrLatchMerge(BasicBlock *BB,
                         [&](Value *anti) {
                           zeroKnownAllocation(NB, anti, args, funcName, TLI);
                         },
-                        anti);
+                                   Gradient(anti));
                   }
                 } else {
                   llvm_unreachable("Unknown shadow rematerialization value");
@@ -4189,7 +4189,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
               return antialloca;
             };
 
-            return applyChainRule(arg->getType(), bb, rule2, antialloca);
+            return applyChainRule(arg->getType(), bb, rule2, Gradient(antialloca));
           }
         }
       }
@@ -4271,8 +4271,8 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
                 cast<GlobalVariable>(shadow)->setInitializer(
                     cast<Constant>(ip));
               },
-              shadow,
-              invertPointerM(arg->getInitializer(), B, /*nullShadow*/ true));
+                         Gradient(shadow),
+                                  Gradient(invertPointerM(arg->getInitializer(), B, /*nullShadow*/ true)));
         }
 
         invertedPointers.insert(std::make_pair(
@@ -4348,7 +4348,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
                            arg->getName() + "'ipc");
     };
 
-    Value *shadow = applyChainRule(shadowTy, bb, rule, invertOp);
+    Value *shadow = applyChainRule(shadowTy, bb, rule, Gradient(invertOp));
 
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, shadow)));
@@ -4370,7 +4370,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
                                        arg->getType());
         };
 
-        return applyChainRule(arg->getType(), bb, rule, ip);
+        return applyChainRule(arg->getType(), bb, rule, Gradient(ip));
 
       } else {
         auto rule = [&](Value *ip) {
@@ -4378,7 +4378,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
                                arg->getType(), arg->getName() + "'ipc");
         };
 
-        Value *shadow = applyChainRule(arg->getType(), bb, rule, ip);
+        Value *shadow = applyChainRule(arg->getType(), bb, rule, Gradient(ip));
 
         invertedPointers.insert(std::make_pair(
             (const Value *)oval, InvertedPointerVH(this, shadow)));
@@ -4412,7 +4412,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
 #endif
         };
 
-        Value *shadow = applyChainRule(arg->getType(), bb, rule, ip);
+        Value *shadow = applyChainRule(arg->getType(), bb, rule, Gradient(ip));
 
         invertedPointers.insert(std::make_pair(
             (const Value *)oval, InvertedPointerVH(this, shadow)));
@@ -4432,7 +4432,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
                                    arg->getName() + "'ipev");
     };
 
-    Value *shadow = applyChainRule(arg->getType(), bb, rule, ip);
+    Value *shadow = applyChainRule(arg->getType(), bb, rule, Gradient(ip));
 
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, shadow)));
@@ -4447,7 +4447,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
                                   arg->getName() + "'ipiv");
     };
 
-    Value *shadow = applyChainRule(arg->getType(), bb, rule, ip0, ip1);
+    Value *shadow = applyChainRule(arg->getType(), bb, rule, Gradient(ip0), Gradient(ip1));
 
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, shadow)));
@@ -4463,7 +4463,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
       ;
     };
 
-    Value *shadow = applyChainRule(arg->getType(), bb, rule, ip);
+    Value *shadow = applyChainRule(arg->getType(), bb, rule, Gradient(ip));
 
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, shadow)));
@@ -4481,7 +4481,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
                                     arg->getName() + "'ipie");
     };
 
-    Value *shadow = applyChainRule(arg->getType(), bb, rule, ip0, ip1);
+    Value *shadow = applyChainRule(arg->getType(), bb, rule, Gradient(ip0), Gradient(ip1));
 
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, shadow)));
@@ -4503,7 +4503,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
 #endif
     };
 
-    Value *shadow = applyChainRule(arg->getType(), bb, rule, ip0, ip1);
+    Value *shadow = applyChainRule(arg->getType(), bb, rule, Gradient(ip0), Gradient(ip1));
 
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, shadow)));
@@ -4517,8 +4517,8 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
           return bb.CreateSelect(getNewFromOriginal(arg->getCondition()), tv,
                                  fv, arg->getName() + "'ipse");
         },
-        invertPointerM(arg->getTrueValue(), bb, nullShadow),
-        invertPointerM(arg->getFalseValue(), bb, nullShadow));
+                                   Gradient(invertPointerM(arg->getTrueValue(), bb, nullShadow)),
+                                            Gradient(invertPointerM(arg->getFalseValue(), bb, nullShadow)));
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, shadow)));
     return shadow;
@@ -4549,7 +4549,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
       return li;
     };
 
-    Value *li = applyChainRule(arg->getType(), bb, rule, ip);
+    Value *li = applyChainRule(arg->getType(), bb, rule, Gradient(ip));
 
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, li)));
@@ -4578,7 +4578,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
       return li;
     };
 
-    Value *li = applyChainRule(arg->getType(), bb, rule, val0, val1);
+    Value *li = applyChainRule(arg->getType(), bb, rule, Gradient(val0), Gradient(val1));
 
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, li)));
@@ -4606,7 +4606,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
       return shadow;
     };
 
-    Value *shadow = applyChainRule(arg->getType(), bb, rule, ip);
+    Value *shadow = applyChainRule(arg->getType(), bb, rule, Gradient(ip));
 
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, shadow)));
@@ -4649,7 +4649,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
           }
         };
 
-        applyChainRule(bb, rule, antialloca);
+        applyChainRule(bb, rule, Gradient(antialloca));
 
         return antialloca;
       } else {
@@ -4695,7 +4695,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
       memset->addParamAttr(0, Attribute::NonNull);
     };
 
-    applyChainRule(bb, rule2, antialloca);
+    applyChainRule(bb, rule2, Gradient(antialloca));
 
     return antialloca;
   } else if (auto II = dyn_cast<IntrinsicInst>(oval)) {
@@ -4719,7 +4719,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
             li->setDebugLoc(getNewFromOriginal(II->getDebugLoc()));
             return li;
           },
-          invertPointerM(II->getArgOperand(0), bb));
+                            Gradient(invertPointerM(II->getArgOperand(0), bb)));
     case Intrinsic::masked_load:
       return applyChainRule(
           II->getType(), bb,
@@ -4732,8 +4732,8 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
             li->setDebugLoc(getNewFromOriginal(II->getDebugLoc()));
             return li;
           },
-          invertPointerM(II->getArgOperand(0), bb),
-          invertPointerM(II->getArgOperand(3), bb, nullShadow));
+                            Gradient(invertPointerM(II->getArgOperand(0), bb)),
+                                     Gradient(invertPointerM(II->getArgOperand(3), bb, nullShadow)));
     }
     }
   } else if (auto phi = dyn_cast<PHINode>(oval)) {
