@@ -109,46 +109,82 @@ struct InvertedPointerConfig : ValueMapConfig<const llvm::Value *> {
   static void onDelete(ExtraData gutils, const llvm::Value *old);
 };
 
-//class EnzymeValue {
-//public:
-//  Value *value;
-//
-//  EnzymeValue(Value *value) : value(value) {}
-//
+static inline Value *extractMeta(IRBuilder<> &Builder, Value *Agg,
+                                 unsigned off) {
+  while (auto Ins = dyn_cast<InsertValueInst>(Agg)) {
+    if (Ins->getNumIndices() != 1)
+      break;
+    if (Ins->getIndices()[0] == off)
+      return Ins->getInsertedValueOperand();
+    else
+      Agg = Ins->getAggregateOperand();
+  }
+  return Builder.CreateExtractValue(Agg, {off});
+}
 
-
-//};
-
-class Primal {
+template <typename T>
+struct Primal {
 private:
-  Value *value;
+  T *value;
 public:
-  bool extractMeta = false;
-  
-  Primal(Value *value) : value(value) {}
+  Primal(T *value) : value(value) {}
 
-  Value* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
+  T* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
     switch (memoryLayout) {
       case VectorModeMemoryLayout::VectorizeAtRootNode:
-        return this->value;
+        return value;
       case VectorModeMemoryLayout::VectorizeAtLeafNodes:
-        return Builder.CreateVectorSplat(width, this->value);
+        return Builder.CreateVectorSplat(width, value);
     }
+  }
+    
+  T* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned i) {
+    return getValue(Builder, memoryLayout, width);
   }
 };
 
-class Gradient {
+template<>
+struct Primal<Type> {
 private:
-  Value *value;
+  Type *type;
 public:
-  bool extractMeta = true;
-  Gradient(Value *value) : value(value) {}
+  Primal(Type *type) : type(type) {}
+
+  Type* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
+    switch (memoryLayout) {
+      case VectorModeMemoryLayout::VectorizeAtRootNode:
+        return type;
+      case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+        return FixedVectorType::get(type, width);
+    }
+  }
+    
+    Type* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned i) {
+      return getValue(Builder, memoryLayout, width);
+  }
+};
+
+template <typename T>
+struct Gradient {
+private:
+  T *value;
+public:
+  Gradient(T *value) : value(value) {}
   
-  Value* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
-        if (value)
+  T* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned i) {
+        if (value && memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode)
+          assert(cast<ArrayType>(value->getType())->getNumElements() == width);
+          if (value)
+            return extractMeta(Builder, value, i);
+    
+      return value;
+    }
+  
+  T* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
+        if (value && memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode)
           assert(cast<ArrayType>(value->getType())->getNumElements() == width);
     
-      return this->value;
+      return value;
     }
 };
 
@@ -1977,32 +2013,8 @@ public:
   Type *getShadowType(Type *ty) {
     return getShadowType(ty, width, memoryLayout);
   }
-
-  static inline Value *extractMeta(IRBuilder<> &Builder, Value *Agg,
-                                   unsigned off) {
-    while (auto Ins = dyn_cast<InsertValueInst>(Agg)) {
-      if (Ins->getNumIndices() != 1)
-        break;
-      if (Ins->getIndices()[0] == off)
-        return Ins->getInsertedValueOperand();
-      else
-        Agg = Ins->getAggregateOperand();
-    }
-    return Builder.CreateExtractValue(Agg, {off});
-  }
   
-  template<typename T, typename Seq>
-  struct expander;
-
-  template<typename T, std::size_t... Is>
-  struct expander<T, std::index_sequence<Is...>> {
-      template<typename E, std::size_t>
-      using elem = E;
-
-      using type = std::tuple<elem<T, Is>...>;
-  };
-
-    /// Unwraps a vector derivative from its internal representation and applies a
+  /// Unwraps a vector derivative from its internal representation and applies a
   /// function f to each element. Return values of f are collected and wrapped.
   template <typename Func, typename... Args>
   Value *applyChainRule(Type *diffType, IRBuilder<> &Builder, Func rule,
@@ -2010,15 +2022,10 @@ public:
     unsigned actualWidth = memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes ? 1 : width;
 
     if (actualWidth > 1) {
-      constexpr int size = sizeof...(args);
-      
       Type *wrappedType = ArrayType::get(diffType, width);
       Value *res = UndefValue::get(wrappedType);
       for (unsigned int i = 0; i < actualWidth; ++i) {
-        using TupelType = typename expander<Value*, std::make_index_sequence<size>>::type;
-        auto tup = TupelType {
-          (args.getValue(Builder, memoryLayout, width) != nullptr ? args.extractMeta ? extractMeta(Builder, args.getValue(Builder, memoryLayout, width), i) : args.getValue(Builder, memoryLayout, width) : nullptr)...};
-        auto diff = std::apply(rule, std::move(tup));
+        auto diff = rule(args.getValue(Builder, memoryLayout, width, i)...);
         res = Builder.CreateInsertValue(res, diff, {i});
       }
       return res;
@@ -2034,13 +2041,8 @@ public:
     unsigned actualWidth = memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes ? 1 : width;
     
     if (actualWidth > 1) {
-      constexpr int size = sizeof...(args);
-
       for (unsigned int i = 0; i < actualWidth; ++i) {
-        using TupelType = typename expander<Value*, std::make_index_sequence<size>>::type;
-        auto tup = TupelType {
-          (args.getValue(Builder, memoryLayout, width) != nullptr ? args.extractMeta ? extractMeta(Builder, args.getValue(Builder, memoryLayout, width), i) : args.getValue(Builder, memoryLayout, width) : nullptr)...};
-        std::apply(rule, std::move(tup));
+        rule(args.getValue(Builder, memoryLayout, width, i)...);
       }
     } else {
       rule(args.getValue(Builder, memoryLayout, width)...);
