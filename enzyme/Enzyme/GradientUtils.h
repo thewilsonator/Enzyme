@@ -123,13 +123,55 @@ static inline Value *extractMeta(IRBuilder<> &Builder, Value *Agg,
 }
 
 template <typename T>
+struct Size {
+private:
+  T *value;
+public:
+  Size(T *value) : value(value) {}
+
+  Value* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
+    if (value)
+    switch (memoryLayout) {
+      case VectorModeMemoryLayout::VectorizeAtRootNode:
+        return value;
+      case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+        return Builder.CreateMul(Builder.getInt32(width), value);
+    }
+  }
+    
+  Value* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned i) {
+    return value;
+  }
+  
+  bool isVector() { return false; }
+};
+
+template <typename T>
+struct Condition {
+private:
+  T *cond;
+public:
+  Condition(T *cond) : cond(cond) {}
+
+  Value* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
+    return cond;
+  }
+    
+  Value* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned i) {
+    return cond;
+  }
+  
+  bool isVector() { return false; }
+};
+
+template <typename T>
 struct Primal {
 private:
   T *value;
 public:
   Primal(T *value) : value(value) {}
 
-  T* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
+  Value* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
     switch (memoryLayout) {
       case VectorModeMemoryLayout::VectorizeAtRootNode:
         return value;
@@ -138,9 +180,11 @@ public:
     }
   }
     
-  T* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned i) {
+  Value* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned i) {
     return getValue(Builder, memoryLayout, width);
   }
+  
+  bool isVector() { return value->getType()->isVectorTy(); }
 };
 
 template<>
@@ -162,6 +206,116 @@ public:
     Type* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned i) {
       return getValue(Builder, memoryLayout, width);
   }
+  
+  bool isVector() { return type->isVectorTy(); }
+};
+
+template<>
+struct Primal<FixedVectorType> {
+private:
+  FixedVectorType *type;
+public:
+  Primal(FixedVectorType *type) : type(type) {}
+
+  FixedVectorType* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
+    switch (memoryLayout) {
+      case VectorModeMemoryLayout::VectorizeAtRootNode:
+        return type;
+      case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+        return FixedVectorType::get(type->getElementType(), width * type->getNumElements());
+    }
+  }
+    
+  FixedVectorType* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned i) {
+      return getValue(Builder, memoryLayout, width);
+  }
+  
+  bool isVector() { return true; }
+};
+
+
+template<>
+struct Primal<Constant> {
+private:
+  Constant *c;
+public:
+  Primal(Constant *c) : c(c) {}
+
+  Constant* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
+    switch (memoryLayout) {
+      case VectorModeMemoryLayout::VectorizeAtRootNode:
+        return c;
+      case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+        std::vector<Constant*> cs(width, c);
+        return ConstantVector::get(cs);
+    }
+  }
+    
+    Constant* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned i) {
+      return getValue(Builder, memoryLayout, width);
+  }
+  
+  bool isVector() { return c->getType()->isVectorTy(); }
+};
+
+template<>
+struct Primal<ConstantInt> {
+private:
+  ConstantInt *c;
+public:
+  Primal(ConstantInt *c) : c(c) {}
+
+  Constant* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
+    switch (memoryLayout) {
+      case VectorModeMemoryLayout::VectorizeAtRootNode:
+        return c;
+      case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+        std::vector<Constant*> cs(width, c);
+        return ConstantVector::get(cs);
+    }
+  }
+    
+  Constant* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned i) {
+      return getValue(Builder, memoryLayout, width);
+  }
+  
+  bool isVector() { return false; }
+};
+
+template<>
+struct Primal<ConstantVector> {
+private:
+  ConstantVector *cv;
+public:
+  Primal(ConstantVector *cv) : cv(cv) {}
+
+  ConstantVector* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
+      return cv;
+  }
+
+  ConstantVector* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned i) {
+      return getValue(Builder, memoryLayout, width);
+  }
+  
+  bool isVector() { return true; }
+};
+
+template<>
+struct Primal<ConstantDataVector> {
+private:
+  ConstantDataVector *cv;
+public:
+  Primal(ConstantDataVector *cv) : cv(cv) {}
+
+  ConstantDataVector* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
+      return cv;
+  }
+
+  ConstantDataVector* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned i) {
+      return getValue(Builder, memoryLayout, width);
+  }
+  
+  bool isVector() { return true; }
 };
 
 template <typename T>
@@ -172,7 +326,7 @@ public:
   Gradient(T *value) : value(value) {}
   
   T* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned i) {
-        if (value && memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode)
+        if ((value && memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode) || (isVector() && memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes))
           assert(cast<ArrayType>(value->getType())->getNumElements() == width);
           if (value)
             return extractMeta(Builder, value, i);
@@ -181,11 +335,15 @@ public:
     }
   
   T* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width) {
+        if (isVector() && memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes)
+          assert(false);
         if (value && memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode)
           assert(cast<ArrayType>(value->getType())->getNumElements() == width);
     
       return value;
     }
+  
+  bool isVector() { return value->getType()->isVectorTy(); }
 };
 
 class InvertedPointerVH : public llvm::CallbackVH {
@@ -2016,19 +2174,39 @@ public:
   
   /// Unwraps a vector derivative from its internal representation and applies a
   /// function f to each element. Return values of f are collected and wrapped.
-  template <typename Func, typename... Args>
+  template <bool forceScalar = false, typename Func, typename... Args>
   Value *applyChainRule(Type *diffType, IRBuilder<> &Builder, Func rule,
                         Args... args) {
-    unsigned actualWidth = memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes ? 1 : width;
-
-    if (actualWidth > 1) {
+    constexpr std::size_t size = sizeof...(Args);
+    std::array<bool, size> isVector = { args.isVector()... };
+    bool hasVectorArgument = std::any_of(isVector.cbegin(), isVector.cend(), [](bool b){ return b;}) || diffType->isVectorTy();
+    
+    if (memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode) {
       Type *wrappedType = ArrayType::get(diffType, width);
       Value *res = UndefValue::get(wrappedType);
-      for (unsigned int i = 0; i < actualWidth; ++i) {
+      for (unsigned int i = 0; i < width; ++i) {
         auto diff = rule(args.getValue(Builder, memoryLayout, width, i)...);
         res = Builder.CreateInsertValue(res, diff, {i});
       }
       return res;
+    } else if (forceScalar || (hasVectorArgument && memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes)) {
+      if (diffType->isVectorTy()) {
+        Type *wrappedType = ArrayType::get(diffType, width);
+        Value *res = UndefValue::get(wrappedType);
+        for (unsigned int i = 0; i < width; ++i) {
+          auto diff = rule(args.getValue(Builder, memoryLayout, width, i)...);
+          res = Builder.CreateInsertValue(res, diff, {i});
+        }
+        return res;
+      } else {
+        Type *wrappedType = FixedVectorType::get(diffType, width);
+        Value *res = UndefValue::get(wrappedType);
+        for (unsigned int i = 0; i < width; ++i) {
+          auto diff = rule(args.getValue(Builder, memoryLayout, width, i)...);
+          res = Builder.CreateInsertElement(res, diff, Builder.getInt32(i));
+        }
+        return res;
+      }
     } else {
       return rule(args.getValue(Builder, memoryLayout, width)...);
     }
@@ -2036,7 +2214,7 @@ public:
 
   /// Unwraps a vector derivative from its internal representation and applies a
   /// function f to each element. Return values of f are collected and wrapped.
-  template <typename Func, typename... Args>
+  template <bool forceScalar = false, typename Func, typename... Args>
   void applyChainRule(IRBuilder<> &Builder, Func rule, Args... args) {
     unsigned actualWidth = memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes ? 1 : width;
     
@@ -2051,7 +2229,7 @@ public:
 
   /// Unwraps an collection of constant vector derivatives from their internal
   /// representations and applies a function f to each element.
-  template <typename Func>
+  template <bool forceScalar = false, typename Func>
   Value *applyChainRule(Type *diffType, ArrayRef<Constant *> diffs,
                         IRBuilder<> &Builder, Func rule) {
     unsigned actualWidth = memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes ? 1 : width;
