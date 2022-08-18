@@ -324,13 +324,14 @@ public:
     if (width == 1 || !value)
       return value;
     
-    if ((value &&
-         memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode) ||
-        (isVector() &&
-         memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes))
+    if (!value)
+      return nullptr;
+    
+    if (memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode ||
+        (isVector() && memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes)) {
       assert(cast<ArrayType>(value->getType())->getNumElements() == width);
-    if (value)
       return GradientUtils::extractMeta(Builder, value, i);
+    }
 
     return value;
   }
@@ -339,6 +340,9 @@ public:
               unsigned width) {
     if (width == 1 || !value)
       return value;
+    
+    if (!value)
+      return nullptr;
     
     if (isVector() &&
         memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes)
@@ -372,6 +376,8 @@ public:
         assert(cast<ArrayType>(val->getType())->getNumElements() == width);
         if (val)
           vals.push_back(cast<Constant>(GradientUtils::extractMeta(Builder, val, i)));
+        else
+          vals.push_back(nullptr);
       }
       return vals;
     }

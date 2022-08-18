@@ -3723,21 +3723,20 @@ public:
         }
         if (!gutils->isConstantValue(orig_ops[1])) {
           Value *und = UndefValue::get(orig_ops[1]->getType());
-          
-          auto mask = ConstantVector::getNullValue(VectorType::get(
+          Constant *mask = ConstantVector::getNullValue(VectorType::get(
               Type::getInt32Ty(und->getContext()),
 #if LLVM_VERSION_MAJOR >= 11
               cast<VectorType>(und->getType())->getElementCount()));
 #else
               cast<VectorType>(und->getType())->getNumElements()));
 #endif
-          auto rule = [&Builder2, &und, &mask](Value *vdiff) {
+          auto rule = [&Builder2](Value *vdiff, Value *und, Value *mask) {
             return Builder2.CreateShuffleVector(
                 Builder2.CreateInsertElement(und, vdiff, (uint64_t)0), und,
                 mask);
           };
           auto vec =
-              applyChainRule(orig_ops[1]->getType(), Builder2, rule, Gradient(vdiff));
+              applyChainRule<true>(orig_ops[1]->getType(), Builder2, rule, Gradient(vdiff), Primal(und), Primal(mask));
           addToDiffe(orig_ops[1], vec, Builder2, orig_ops[0]->getType());
         }
         return;
@@ -10022,7 +10021,7 @@ public:
                                ? nullptr
                                : diffe(orig->getArgOperand(1), Builder2);
 
-              auto rule1 = [&Builder2](Value *op, Value *d, Value *arg0) {
+              auto rule1 = [&Builder2](Value *op, Value *arg0, Value *d) {
                 return Builder2.CreateFMul(arg0, Builder2.CreateFDiv(op, d));
               };
 

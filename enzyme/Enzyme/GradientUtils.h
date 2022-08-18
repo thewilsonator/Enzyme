@@ -1823,8 +1823,10 @@ public:
           aty->getNumElements());
     } else if (auto pty = dyn_cast<PointerType>(ty)) {
       return PointerType::get(
-          getShadowTypeVectorizedAtLeafNodes(pty->getElementType(), width),
-          pty->getAddressSpace());
+                              getShadowTypeVectorizedAtLeafNodes(pty->getElementType(), width),
+                              pty->getAddressSpace());
+    } else if (auto vty = dyn_cast<VectorType>(ty)) {
+      return ArrayType::get(ty, width);
     } else {
       return VectorType::get(ty, width, false);
     }
