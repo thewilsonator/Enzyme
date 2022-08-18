@@ -52,13 +52,15 @@ public:
 
   Value *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                   unsigned width) {
-    if (value)
+    if (value && width > 1)
       switch (memoryLayout) {
       case VectorModeMemoryLayout::VectorizeAtRootNode:
         return value;
       case VectorModeMemoryLayout::VectorizeAtLeafNodes:
         return Builder.CreateMul(Builder.getInt32(width), value);
       }
+    
+    return value;
   }
 
   Value *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
@@ -98,6 +100,10 @@ public:
 
   Value *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                   unsigned width) {
+    
+    if (width == 1)
+      return value;
+    
     switch (memoryLayout) {
     case VectorModeMemoryLayout::VectorizeAtRootNode:
       return value;
@@ -123,6 +129,10 @@ public:
 
   Type *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                  unsigned width) {
+    
+    if (width == 1)
+      return type;
+    
     switch (memoryLayout) {
     case VectorModeMemoryLayout::VectorizeAtRootNode:
       return type;
@@ -148,6 +158,9 @@ public:
 
   ArrayType *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                       unsigned width) {
+    if (width == 1)
+      return type;
+    
     switch (memoryLayout) {
     case VectorModeMemoryLayout::VectorizeAtRootNode:
       return type;
@@ -176,6 +189,9 @@ public:
   FixedVectorType *getValue(IRBuilder<> &Builder,
                             VectorModeMemoryLayout memoryLayout,
                             unsigned width) {
+    if (width == 1)
+      return type;
+    
     switch (memoryLayout) {
     case VectorModeMemoryLayout::VectorizeAtRootNode:
       return type;
@@ -203,6 +219,9 @@ public:
 
   Constant *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                      unsigned width) {
+    if (width == 1)
+      return c;
+    
     switch (memoryLayout) {
     case VectorModeMemoryLayout::VectorizeAtRootNode:
       return c;
@@ -229,6 +248,9 @@ public:
 
   Constant *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                      unsigned width) {
+    if (width == 1)
+      return c;
+    
     switch (memoryLayout) {
     case VectorModeMemoryLayout::VectorizeAtRootNode:
       return c;
@@ -299,6 +321,9 @@ public:
 
   T *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
               unsigned width, unsigned i) {
+    if (width == 1 || !value)
+      return value;
+    
     if ((value &&
          memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode) ||
         (isVector() &&
@@ -312,6 +337,9 @@ public:
 
   T *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
               unsigned width) {
+    if (width == 1 || !value)
+      return value;
+    
     if (isVector() &&
         memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes)
       assert(false);
@@ -331,18 +359,21 @@ private:
 public:
   Gradient(ArrayRef<Constant *> values) : values(values) {}
 
-  ArrayRef<Constant *> getValue(IRBuilder<> &Builder,
+  std::vector<Constant *> getValue(IRBuilder<> &Builder,
                                 VectorModeMemoryLayout memoryLayout,
                                 unsigned width, unsigned i) {
-    llvm::SmallVector<Constant *, 3> vals;
-
+    if (width == 1)
+      return values;
+    
     if (memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode ||
         memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes) {
+      std::vector<Constant*> vals;
       for (auto &&val : values) {
         assert(cast<ArrayType>(val->getType())->getNumElements() == width);
         if (val)
           vals.push_back(cast<Constant>(GradientUtils::extractMeta(Builder, val, i)));
       }
+      return vals;
     }
 
     return values;
@@ -351,13 +382,18 @@ public:
   ArrayRef<Constant *> getValue(IRBuilder<> &Builder,
                                 VectorModeMemoryLayout memoryLayout,
                                 unsigned width) {
-    if (memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes)
-      assert(false);
-
-    if (memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode) {
-      for (auto &&val : values) {
-        assert(cast<ArrayType>(val->getType())->getNumElements() == width);
-      }
+    if (width == 1)
+      return values;
+    
+    switch (memoryLayout) {
+      case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+        assert(false);
+        break;
+      case VectorModeMemoryLayout::VectorizeAtRootNode:
+        for (auto &&val : values) {
+          assert(cast<ArrayType>(val->getType())->getNumElements() == width);
+        }
+        break;
     }
 
     return values;

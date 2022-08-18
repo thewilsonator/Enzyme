@@ -3723,20 +3723,21 @@ public:
         }
         if (!gutils->isConstantValue(orig_ops[1])) {
           Value *und = UndefValue::get(orig_ops[1]->getType());
-          ConstantVector *mask = cast<ConstantVector>(ConstantVector::getNullValue(VectorType::get(
+          
+          auto mask = ConstantVector::getNullValue(VectorType::get(
               Type::getInt32Ty(und->getContext()),
 #if LLVM_VERSION_MAJOR >= 11
-              cast<VectorType>(und->getType())->getElementCount())));
+              cast<VectorType>(und->getType())->getElementCount()));
 #else
-              cast<VectorType>(und->getType())->getNumElements())));
+              cast<VectorType>(und->getType())->getNumElements()));
 #endif
-          auto rule = [&Builder2](Value *vdiff, Value *und, ConstantVector *mask) {
+          auto rule = [&Builder2, &und, &mask](Value *vdiff) {
             return Builder2.CreateShuffleVector(
                 Builder2.CreateInsertElement(und, vdiff, (uint64_t)0), und,
                 mask);
           };
           auto vec =
-              applyChainRule(orig_ops[1]->getType(), Builder2, rule, Gradient(vdiff), Primal(und), Primal(mask));
+              applyChainRule(orig_ops[1]->getType(), Builder2, rule, Gradient(vdiff));
           addToDiffe(orig_ops[1], vec, Builder2, orig_ops[0]->getType());
         }
         return;
@@ -4274,6 +4275,7 @@ public:
 
         Value *cmp =
             Builder2.CreateFCmpOEQ(arg, Constant::getNullValue(tys[0]));
+        
         auto rule = [&](Value *op, Value *arg, Constant *half, Value *cmp, Type *opType) {
           CallInst *cal = cast<CallInst>(Builder2.CreateCall(FT, SqrtF, {arg}));
           cal->setCallingConv(CI.getCallingConv());
@@ -4286,7 +4288,7 @@ public:
                                        dif0);
         };
 
-        Value *dif0 = applyChainRule</*forceScalar*/true>(I.getType(), Builder2, rule, Gradient(op), Primal(arg), Primal(half), Condition(cmp), Primal(opType));
+        Value *dif0 = applyChainRule</*forceScalar*/true>(I.getType(), Builder2, rule, Gradient(op), Primal(arg), Primal(half), Primal(cmp), Primal(opType));
         setDiffe(&I, dif0, Builder2);
         return;
       }
@@ -4345,7 +4347,7 @@ public:
         };
 
         Value *dif =
-            applyChainRule(I.getType(), Builder2, rule, Condition(cmp), Gradient(diffe0), Gradient(diffe1));
+            applyChainRule(I.getType(), Builder2, rule, Primal(cmp), Gradient(diffe0), Gradient(diffe1));
         setDiffe(&I, dif, Builder2);
         return;
       }
@@ -4379,7 +4381,7 @@ public:
         };
 
         Value *dif =
-            applyChainRule(I.getType(), Builder2, rule, Condition(cmp), Gradient(diffe0), Gradient(diffe1));
+            applyChainRule(I.getType(), Builder2, rule, Primal(cmp), Gradient(diffe0), Gradient(diffe1));
         setDiffe(&I, dif, Builder2);
 
         return;
@@ -4575,7 +4577,7 @@ public:
                 Builder2.CreateFMul(Builder2.CreateFMul(op, cal), cast));
           };
 
-          Value *dif0 = applyChainRule(I.getType(), Builder2, rule, Gradient(op), Primal(cal), Primal(cast), Condition(cmp));
+          Value *dif0 = applyChainRule(I.getType(), Builder2, rule, Gradient(op), Primal(cal), Primal(cast), Primal(cmp));
           setDiffe(&I, dif0, Builder2);
         }
         return;

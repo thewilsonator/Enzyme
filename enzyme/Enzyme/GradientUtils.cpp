@@ -216,10 +216,10 @@ SmallVector<unsigned int, 9> MD_ToCopy = {
   }
 
 #if LLVM_VERSION_MAJOR >= 10
-  void DiffeGradientUtils::addToInvertedPtrDiffe(Value *origptr, Value *dif, IRBuilder<> &BuilderM,
+  void DiffeGradientUtils::addToInvertedPtrDiffe(Instruction *orig, Type *addingType, unsigned start, unsigned size, Value *origptr, Value *dif, IRBuilder<> &BuilderM,
                              MaybeAlign align, Value *OrigOffset, Value *mask)
 #else
-  void DiffeGradientUtils::addToInvertedPtrDiffe(Value *origptr, Value *dif, IRBuilder<> &BuilderM,
+  void DiffeGradientUtils::addToInvertedPtrDiffe(Instruction *orig, Type *addingType, unsigned start, unsigned size, Value *origptr, Value *dif, IRBuilder<> &BuilderM,
                              unsigned align, Value *OrigOffset, Value *mask)
 #endif
   {
@@ -4106,7 +4106,7 @@ DiffeGradientUtils *DiffeGradientUtils::CreateFromClone(
   auto res = new DiffeGradientUtils(Logic, newFunc, oldFunc, TLI, TA, TR,
                                     invertedPointers, constant_values,
                                     nonconstant_values, retType, constant_args,
-                                    originalToNew, mode, width, omp);
+                                    originalToNew, mode, memoryLayout, width, omp);
 
   return res;
 }

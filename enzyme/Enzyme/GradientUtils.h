@@ -1876,7 +1876,7 @@ public:
     std::array<bool, size> isVector = { args.isVector()... };
     bool hasVectorArgument = std::any_of(isVector.cbegin(), isVector.cend(), [](bool b){ return b;}) || diffType->isVectorTy();
     
-    if (memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode) {
+    if (width > 1 && memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode) {
       Type *wrappedType = ArrayType::get(diffType, width);
       Value *res = UndefValue::get(wrappedType);
       for (unsigned int i = 0; i < width; ++i) {
@@ -1884,7 +1884,7 @@ public:
         res = Builder.CreateInsertValue(res, diff, {i});
       }
       return res;
-    } else if (forceScalar || (hasVectorArgument && memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes)) {
+    } else if (width > 1 && (forceScalar || (hasVectorArgument && memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes))) {
       if (diffType->isVectorTy()) {
         Type *wrappedType = ArrayType::get(diffType, width);
         Value *res = UndefValue::get(wrappedType);
@@ -1902,9 +1902,8 @@ public:
         }
         return res;
       }
-    } else {
-      return rule(args.getValue(Builder, memoryLayout, width)...);
     }
+    return rule(args.getValue(Builder, memoryLayout, width)...);
   }
 
   /// Unwraps a vector derivative from its internal representation and applies a
