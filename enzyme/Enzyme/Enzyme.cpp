@@ -1868,6 +1868,7 @@ public:
     // convention.
     if (width > 1 && !diffret->getType()->isEmptyTy() &&
         !diffret->getType()->isVoidTy() &&
+        memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode &&
         (mode == DerivativeMode::ForwardMode ||
          mode == DerivativeMode::ForwardModeSplit)) {
 

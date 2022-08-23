@@ -67,8 +67,6 @@ public:
                   unsigned width, unsigned i) {
     return value;
   }
-
-  bool isVector() { return false; }
 };
 
 template <typename T> struct Condition {
@@ -87,8 +85,6 @@ public:
                   unsigned width, unsigned i) {
     return cond;
   }
-
-  bool isVector() { return false; }
 };
 
 template <typename T> struct Primal {
@@ -116,8 +112,6 @@ public:
                   unsigned width, unsigned i) {
     return getValue(Builder, memoryLayout, width);
   }
-
-  bool isVector() { return value->getType()->isVectorTy(); }
 };
 
 template <> struct Primal<Type> {
@@ -145,8 +139,6 @@ public:
                  unsigned width, unsigned i) {
     return getValue(Builder, memoryLayout, width);
   }
-
-  bool isVector() { return type->isVectorTy(); }
 };
 
 template <> struct Primal<ArrayType> {
@@ -175,8 +167,6 @@ public:
                       unsigned width, unsigned i) {
     return getValue(Builder, memoryLayout, width);
   }
-
-  bool isVector() { return type->isVectorTy(); }
 };
 
 template <> struct Primal<FixedVectorType> {
@@ -206,8 +196,6 @@ public:
                             unsigned i) {
     return getValue(Builder, memoryLayout, width);
   }
-
-  bool isVector() { return true; }
 };
 
 template <> struct Primal<Constant> {
@@ -235,8 +223,6 @@ public:
                      unsigned width, unsigned i) {
     return getValue(Builder, memoryLayout, width);
   }
-
-  bool isVector() { return c->getType()->isVectorTy(); }
 };
 
 template <> struct Primal<ConstantInt> {
@@ -264,8 +250,6 @@ public:
                      unsigned width, unsigned i) {
     return getValue(Builder, memoryLayout, width);
   }
-
-  bool isVector() { return false; }
 };
 
 template <> struct Primal<ConstantVector> {
@@ -286,8 +270,6 @@ public:
                            unsigned i) {
     return getValue(Builder, memoryLayout, width);
   }
-
-  bool isVector() { return true; }
 };
 
 template <> struct Primal<ConstantDataVector> {
@@ -308,8 +290,6 @@ public:
                                unsigned width, unsigned i) {
     return getValue(Builder, memoryLayout, width);
   }
-
-  bool isVector() { return true; }
 };
 
 template <typename T> struct Gradient {
@@ -327,8 +307,7 @@ public:
     if (!value)
       return nullptr;
     
-    if (memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode ||
-        (isVector() && memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes)) {
+    if (memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode) {
       assert(cast<ArrayType>(value->getType())->getNumElements() == width);
       return GradientUtils::extractMeta(Builder, value, i);
     }
@@ -344,16 +323,11 @@ public:
     if (!value)
       return nullptr;
     
-    if (isVector() &&
-        memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes)
-      assert(false);
     if (value && memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode)
       assert(cast<ArrayType>(value->getType())->getNumElements() == width);
 
     return value;
   }
-
-  bool isVector() { return value->getType()->isVectorTy(); }
 };
 
 template <> struct Gradient<ArrayRef<Constant *>> {
@@ -404,8 +378,6 @@ public:
 
     return values;
   }
-
-  bool isVector() { return false; }
 };
 
 

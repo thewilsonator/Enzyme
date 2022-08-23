@@ -4829,12 +4829,12 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
     Value *invertOp = invertPointerM(arg->getOperand(0), bb);
     Type *shadowTy = arg->getDestTy();
 
-    auto rule = [&](Value *invertOp) {
+    auto rule = [&](Value *invertOp, Type *shadowTy) {
       return bb.CreateCast(arg->getOpcode(), invertOp, shadowTy,
                            arg->getName() + "'ipc");
     };
 
-    Value *shadow = applyChainRule(shadowTy, bb, rule, Gradient(invertOp));
+    Value *shadow = applyChainRule(shadowTy, bb, rule, Gradient(invertOp), Primal(shadowTy));
 
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, shadow)));

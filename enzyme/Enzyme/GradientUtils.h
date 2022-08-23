@@ -1826,7 +1826,7 @@ public:
                               getShadowTypeVectorizedAtLeafNodes(pty->getElementType(), width),
                               pty->getAddressSpace());
     } else if (auto vty = dyn_cast<VectorType>(ty)) {
-      return ArrayType::get(ty, width);
+      return VectorType::get(vty->getElementType(), vty->getElementCount() * width);
     } else {
       return VectorType::get(ty, width, false);
     }
@@ -1868,16 +1868,20 @@ public:
     }
     return Builder.CreateExtractValue(Agg, {off});
   }
+  
+  static inline SmallVector<int,0> createMaskForConcatenation(unsigned vector_length, unsigned width) {
+    SmallVector<int,0> Mask;
+    for (int i = 0; i < vector_length * width; ++i)
+      Mask.push_back(i);
+    
+    return Mask;
+  }
 
   /// Unwraps a vector derivative from its internal representation and applies a
   /// function f to each element. Return values of f are collected and wrapped.
   template <bool forceScalar = false, typename Func, typename... Args>
   Value *applyChainRule(Type *diffType, IRBuilder<> &Builder, Func rule,
                         Args... args) {
-    constexpr std::size_t size = sizeof...(Args);
-    std::array<bool, size> isVector = { args.isVector()... };
-    bool hasVectorArgument = std::any_of(isVector.cbegin(), isVector.cend(), [](bool b){ return b;}) || diffType->isVectorTy();
-    
     if (width > 1 && memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode) {
       Type *wrappedType = ArrayType::get(diffType, width);
       Value *res = UndefValue::get(wrappedType);
@@ -1886,13 +1890,18 @@ public:
         res = Builder.CreateInsertValue(res, diff, {i});
       }
       return res;
-    } else if (width > 1 && (forceScalar || (hasVectorArgument && memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes))) {
+    } else if (width > 1 && forceScalar && memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes) {
       if (diffType->isVectorTy()) {
-        Type *wrappedType = ArrayType::get(diffType, width);
-        Value *res = UndefValue::get(wrappedType);
+        Value *res = nullptr;
         for (unsigned int i = 0; i < width; ++i) {
           auto diff = rule(args.getValue(Builder, memoryLayout, width, i)...);
-          res = Builder.CreateInsertValue(res, diff, {i});
+          if (res) {
+            VectorType *rvty = cast<VectorType>(res->getType());
+            SmallVector<int,0> Mask = createMaskForConcatenation(rvty->getElementCount().getKnownMinValue(), width);
+            res = Builder.CreateShuffleVector(res, diff, Mask);
+          } else {
+            res = diff;
+          }
         }
         return res;
       } else {
