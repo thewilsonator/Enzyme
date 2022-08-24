@@ -19,8 +19,7 @@
 ; }
 
 %struct.n = type { double*, %struct.n* }
-%struct.n.vec = type { [3 x double]*, [3 x %struct.n]* }
-%struct.Gradients = type { [3 x double] }
+%struct.n.vec = type { <3 x double>*, %struct.n.vec* }
 
 ; Function Attrs: noinline norecurse nounwind readonly uwtable
 define dso_local double @sum_list(%struct.n* noalias readonly %node, i64 %times) local_unnamed_addr #0 {
@@ -60,14 +59,14 @@ for.body5:                                        ; preds = %for.body5, %for.con
 declare dso_local noalias i8* @malloc(i64) local_unnamed_addr #2
 
 ; Function Attrs: noinline nounwind uwtable
-define dso_local %struct.Gradients @derivative(%struct.n* %x, %struct.n.vec* %xp, i64 %n) {
+define dso_local <3 x double> @derivative(%struct.n* %x, %struct.n.vec* %xp, i64 %n) {
 entry:
-  %0 = tail call %struct.Gradients (double (%struct.n*, i64)*, ...) @__enzyme_fwddiff(double (%struct.n*, i64)* nonnull @sum_list, metadata !"enzyme_width", i64 3, %struct.n* %x, %struct.n.vec* %xp, i64 %n)
-  ret %struct.Gradients %0
+  %0 = tail call <3 x double> (double (%struct.n*, i64)*, ...) @__enzyme_fwddiff(double (%struct.n*, i64)* nonnull @sum_list, metadata !"enzyme_width", i64 3, %struct.n* %x, %struct.n.vec* %xp, i64 %n)
+  ret <3 x double> %0
 }
 
 ; Function Attrs: nounwind
-declare %struct.Gradients @__enzyme_fwddiff(double (%struct.n*, i64)*, ...) #4
+declare <3 x double> @__enzyme_fwddiff(double (%struct.n*, i64)*, ...) #4
 
 
 attributes #0 = { noinline norecurse nounwind readonly uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="true" "use-soft-float"="false" }
@@ -92,22 +91,22 @@ attributes #4 = { nounwind }
 !10 = !{!4, !4, i64 0}
 
 
-; CHECK: define internal [3 x double] @fwddiffe3sum_list(%struct.n* noalias readonly %node, %struct.n.Vec.3* %"node'", i64 %times) local_unnamed_addr #3 {
+; CHECK: define internal <3 x double> @fwddiffe3sum_list(%struct.n* noalias readonly %node, %struct.n.Vec.3* %"node'", i64 %times)
 ; CHECK-NEXT: entry:
 ; CHECK-NEXT:   %cmp18 = icmp eq %struct.n* %node, null
 ; CHECK-NEXT:   br i1 %cmp18, label %for.cond.cleanup, label %for.cond1.preheader
 
 ; CHECK: for.cond1.preheader:                              ; preds = %entry, %for.cond.cleanup4
-; CHECK-NEXT:   %0 = phi fast [3 x double] [ %13, %for.cond.cleanup4 ], [ zeroinitializer, %entry ]
+; CHECK-NEXT:   %0 = phi fast <3 x double> [ %5, %for.cond.cleanup4 ], [ zeroinitializer, %entry ]
 ; CHECK-NEXT:   %1 = phi %struct.n.Vec.3* [ %"'ipl3", %for.cond.cleanup4 ], [ %"node'", %entry ]
 ; CHECK-NEXT:   %val.020 = phi %struct.n* [ %3, %for.cond.cleanup4 ], [ %node, %entry ]
 ; CHECK-NEXT:   %"values'ipg" = getelementptr inbounds %struct.n.Vec.3, %struct.n.Vec.3* %1, i64 0, i32 0
-; CHECK-NEXT:   %"'ipl" = load [3 x double]*, [3 x double]** %"values'ipg", align 8, !tbaa !2
+; CHECK-NEXT:   %"'ipl" = load <3 x double>*, <3 x double>** %"values'ipg", align 8, !tbaa !2
 ; CHECK-NEXT:   br label %for.body5
 
 ; CHECK: for.cond.cleanup:                                 ; preds = %for.cond.cleanup4, %entry
-; CHECK-NEXT:   %2 = phi fast [3 x double] [ zeroinitializer, %entry ], [ %13, %for.cond.cleanup4 ]
-; CHECK-NEXT:   ret [3 x double] %2
+; CHECK-NEXT:   %2 = phi fast <3 x double> [ zeroinitializer, %entry ], [ %5, %for.cond.cleanup4 ]
+; CHECK-NEXT:   ret <3 x double> %2
 
 ; CHECK: for.cond.cleanup4:                                ; preds = %for.body5
 ; CHECK-NEXT:   %"next'ipg" = getelementptr inbounds %struct.n.Vec.3, %struct.n.Vec.3* %1, i64 0, i32 1
@@ -118,24 +117,12 @@ attributes #4 = { nounwind }
 ; CHECK-NEXT:   br i1 %cmp, label %for.cond.cleanup, label %for.cond1.preheader
 
 ; CHECK: for.body5:                                        ; preds = %for.body5, %for.cond1.preheader
-; CHECK-NEXT:   %4 = phi fast [3 x double] [ %0, %for.cond1.preheader ], [ %13, %for.body5 ]
+; CHECK-NEXT:   %4 = phi fast <3 x double> [ %0, %for.cond1.preheader ], [ %5, %for.body5 ]
 ; CHECK-NEXT:   %iv1 = phi i64 [ 0, %for.cond1.preheader ], [ %iv.next2, %for.body5 ]
 ; CHECK-NEXT:   %iv.next2 = add nuw nsw i64 %iv1, 1
-; CHECK-NEXT:   %"'ipl4.elt" = getelementptr inbounds [3 x double], [3 x double]* %"'ipl", i64 %iv1, i64 0
-; CHECK-NEXT:   %"'ipl4.unpack" = load double, double* %"'ipl4.elt", align 8, !tbaa !8
-; CHECK-NEXT:   %"'ipl4.elt6" = getelementptr inbounds [3 x double], [3 x double]* %"'ipl", i64 %iv1, i64 1
-; CHECK-NEXT:   %"'ipl4.unpack7" = load double, double* %"'ipl4.elt6", align 8, !tbaa !8
-; CHECK-NEXT:   %"'ipl4.elt8" = getelementptr inbounds [3 x double], [3 x double]* %"'ipl", i64 %iv1, i64 2
-; CHECK-NEXT:   %"'ipl4.unpack9" = load double, double* %"'ipl4.elt8", align 8, !tbaa !8
-; CHECK-NEXT:   %5 = extractvalue [3 x double] %4, 0
-; CHECK-NEXT:   %6 = fadd fast double %"'ipl4.unpack", %5
-; CHECK-NEXT:   %7 = insertvalue [3 x double] undef, double %6, 0
-; CHECK-NEXT:   %8 = extractvalue [3 x double] %4, 1
-; CHECK-NEXT:   %9 = fadd fast double %"'ipl4.unpack7", %8
-; CHECK-NEXT:   %10 = insertvalue [3 x double] %7, double %9, 1
-; CHECK-NEXT:   %11 = extractvalue [3 x double] %4, 2
-; CHECK-NEXT:   %12 = fadd fast double %"'ipl4.unpack9", %11
-; CHECK-NEXT:   %13 = insertvalue [3 x double] %10, double %12, 2
+; CHECK-NEXT:   %"arrayidx'ipg" = getelementptr inbounds <3 x double>, <3 x double>* %"'ipl", i64 %iv1
+; CHECK-NEXT:   %"'ipl4" = load <3 x double>, <3 x double>* %"arrayidx'ipg", align 8, !tbaa !8
+; CHECK-NEXT:   %5 = fadd fast <3 x double> %"'ipl4", %4
 ; CHECK-NEXT:   %exitcond = icmp eq i64 %iv1, %times
 ; CHECK-NEXT:   br i1 %exitcond, label %for.cond.cleanup4, label %for.body5
 ; CHECK-NEXT: }
