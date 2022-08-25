@@ -2709,7 +2709,7 @@ public:
               };
 
               auto diffe =
-                  applyChainRule(BO.getType(), Builder2, rule, Gradient(dif[1 - i]), Primal(CV), Primal(eFT));
+                  applyChainRule<true>(BO.getType(), Builder2, rule, Gradient(dif[1 - i]), Primal(CV), Primal(eFT));
               setDiffe(&BO, diffe, Builder2);
               return;
             }
@@ -4233,12 +4233,12 @@ public:
                           : diffe(orig_ops[1], Builder2);
 
 
-        auto rule = [&](Value *accdif, Value *vecdif, Type *op0Ty, Type *op1Ty) {
+        auto rule = [&](Value *accdif, Value *vecdif) {
 #if LLVM_VERSION_MAJOR < 12
         auto vfra = Intrinsic::getDeclaration(
-            M, ID, {op0Ty, op1Ty});
+            M, ID, {accdif->getType(), vecdif->getType()});
 #else
-        auto vfra = Intrinsic::getDeclaration(M, ID, {op1Ty});
+        auto vfra = Intrinsic::getDeclaration(M, ID, {vecdif->getType()});
 #endif
           auto cal = Builder2.CreateCall(vfra, {accdif, vecdif});
           cal->setCallingConv(vfra->getCallingConv());
@@ -4247,7 +4247,7 @@ public:
         };
 
         Value *dif =
-            applyChainRule(I.getType(), Builder2, rule, Gradient(accdif), Gradient(vecdif), Primal(orig_ops[0]->getType()), Primal(orig_ops[1]->getType()));
+            applyChainRule<true>(I.getType(), Builder2, rule, Gradient(accdif), Gradient(vecdif));
         setDiffe(&I, dif, Builder2);
         return;
       }

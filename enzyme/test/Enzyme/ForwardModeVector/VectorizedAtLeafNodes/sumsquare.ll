@@ -37,8 +37,7 @@ attributes #1 = { nounwind uwtable }
 attributes #2 = { nounwind }
 
 
-; CHECK: define dso_local <3 x double> @dsumsquare(double* %x, <3 x double>* %xp, i64 %n)
-; CHECK-NEXT:  entry:
+; CHECK: define dso_local <3 x double> @dsumsquare(double* %x, <3 x double>* %xp, i64 %n) local_unnamed_addr #1 {
 ; CHECK-NEXT: entry:
 ; CHECK-NEXT:   br label %for.body.i
 

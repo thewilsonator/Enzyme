@@ -20,10 +20,8 @@ entry:
 declare <3 x double> @__enzyme_fwddiff(double (double)*, ...)
 
 
-; CHECK: define internal <3 x double> @fwddiffe3tester(double %x, <3 x double> %"x'")
+; CHECK: define internal <3 x double> @fwddiffe3tester(double %x, <3 x double> %"x'") #0 {
 ; CHECK-NEXT:  entry:
-; CHECK-NEXT:   %"cstx'ipc" = bitcast <3 x double> %"x'" to <3 x i64>
 ; CHECK-NEXT:   %0 = fneg fast <3 x double> %"x'"
-; CHECK-NEXT:   %1 = bitcast <3 x double> %0 to <3 x i64>
 ; CHECK-NEXT:   ret <3 x double> %0
 ; CHECK-NEXT: }

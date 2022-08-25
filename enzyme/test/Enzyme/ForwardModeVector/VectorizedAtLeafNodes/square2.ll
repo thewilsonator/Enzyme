@@ -42,31 +42,19 @@ attributes #3 = { "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-
 attributes #4 = { nounwind }
 
 
-; CHECK: define internal void @fwddiffe3square_(double* nocapture readonly [[SRC:%.*]], [3 x double*] %"src'", double* nocapture [[DEST:%.*]], [3 x double*] %"dest'") 
+; CHECK: define internal void @fwddiffe3square_(double* nocapture readonly %src, <3 x double>* %"src'", double* nocapture %dest, <3 x double>* %"dest'")
 ; CHECK-NEXT:  entry:
-; CHECK-NEXT:    [[TMP0:%.*]] = extractvalue [3 x double*] %"src'", 0
-; CHECK-NEXT:    %"'ipl" = load double, double* [[TMP0]], align 8
-; CHECK-NEXT:    [[TMP1:%.*]] = extractvalue [3 x double*] %"src'", 1
-; CHECK-NEXT:    %"'ipl1" = load double, double* [[TMP1]], align 8
-; CHECK-NEXT:    [[TMP2:%.*]] = extractvalue [3 x double*] %"src'", 2
-; CHECK-NEXT:    %"'ipl2" = load double, double* [[TMP2]], align 8
-; CHECK-NEXT:    [[TMP3:%.*]] = load double, double* [[SRC]], align 8
-; CHECK-NEXT:    [[MUL:%.*]] = fmul double [[TMP3]], [[TMP3]]
-; CHECK-NEXT:    [[TMP4:%.*]] = fmul fast double %"'ipl", [[TMP3]]
-; CHECK-NEXT:    [[TMP5:%.*]] = fmul fast double %"'ipl", [[TMP3]]
-; CHECK-NEXT:    [[TMP6:%.*]] = fadd fast double [[TMP4]], [[TMP5]]
-; CHECK-NEXT:    [[TMP7:%.*]] = fmul fast double %"'ipl1", [[TMP3]]
-; CHECK-NEXT:    [[TMP8:%.*]] = fmul fast double %"'ipl1", [[TMP3]]
-; CHECK-NEXT:    [[TMP9:%.*]] = fadd fast double [[TMP7]], [[TMP8]]
-; CHECK-NEXT:    [[TMP10:%.*]] = fmul fast double %"'ipl2", [[TMP3]]
-; CHECK-NEXT:    [[TMP11:%.*]] = fmul fast double %"'ipl2", [[TMP3]]
-; CHECK-NEXT:    [[TMP12:%.*]] = fadd fast double [[TMP10]], [[TMP11]]
-; CHECK-NEXT:    store double [[MUL]], double* [[DEST]], align 8
-; CHECK-NEXT:    [[TMP13:%.*]] = extractvalue [3 x double*] %"dest'", 0
-; CHECK-NEXT:    store double [[TMP6]], double* [[TMP13]], align 8
-; CHECK-NEXT:    [[TMP14:%.*]] = extractvalue [3 x double*] %"dest'", 1
-; CHECK-NEXT:    store double [[TMP9]], double* [[TMP14]], align 8
-; CHECK-NEXT:    [[TMP15:%.*]] = extractvalue [3 x double*] %"dest'", 2
-; CHECK-NEXT:    store double [[TMP12]], double* [[TMP15]], align 8
-; CHECK-NEXT:    ret void
-;
+; CHECK-NEXT:   %"'ipl" = load <3 x double>, <3 x double>* %"src'", align 8
+; CHECK-NEXT:   %0 = load double, double* %src, align 8
+; CHECK-NEXT:   %mul = fmul double %0, %0
+; CHECK-NEXT:   %.splatinsert = insertelement <3 x double> poison, double %0, i32 0
+; CHECK-NEXT:   %.splat = shufflevector <3 x double> %.splatinsert, <3 x double> poison, <3 x i32> zeroinitializer
+; CHECK-NEXT:   %.splatinsert1 = insertelement <3 x double> poison, double %0, i32 0
+; CHECK-NEXT:   %.splat2 = shufflevector <3 x double> %.splatinsert1, <3 x double> poison, <3 x i32> zeroinitializer
+; CHECK-NEXT:   %1 = fmul fast <3 x double> %"'ipl", %.splat2
+; CHECK-NEXT:   %2 = fmul fast <3 x double> %"'ipl", %.splat
+; CHECK-NEXT:   %3 = fadd fast <3 x double> %1, %2
+; CHECK-NEXT:   store double %mul, double* %dest, align 8
+; CHECK-NEXT:   store <3 x double> %3, <3 x double>* %"dest'", align 8
+; CHECK-NEXT:   ret void
+; CHECK-NEXT: }

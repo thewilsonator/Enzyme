@@ -22,7 +22,7 @@ entry:
 }
 
 
-; CHECK-NEXT: define internal <3 x double> @fwddiffe3tester(double %x, <3 x double> %"x'")
+; CHECK: define internal <3 x double> @fwddiffe3tester(double %x, <3 x double> %"x'")
 ; CHECK-NEXT: entry:
 ; CHECK-NEXT:   %.splatinsert = insertelement <3 x double> poison, double %x, i32 0
 ; CHECK-NEXT:   %.splat = shufflevector <3 x double> %.splatinsert, <3 x double> poison, <3 x i32> zeroinitializer

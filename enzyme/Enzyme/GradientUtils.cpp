@@ -4508,8 +4508,8 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
     }
 
     if (isa<ConstantExpr>(oval)) {
-      auto rule = [&oval]() { return oval; };
-      return applyChainRule(oval->getType(), BuilderM, rule);
+      auto rule = [](Value *oval) { return oval; };
+      return applyChainRule(oval->getType(), BuilderM, rule, Primal(oval));
     }
 
     Value *newval = getNewFromOriginal(oval);
@@ -4829,7 +4829,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
     Value *invertOp = invertPointerM(arg->getOperand(0), bb);
     Type *shadowTy = arg->getDestTy();
 
-    auto rule = [&](Value *invertOp, Type *shadowTy) {
+    auto rule = [&bb, &arg](Value *invertOp, Type *shadowTy) {
       return bb.CreateCast(arg->getOpcode(), invertOp, shadowTy,
                            arg->getName() + "'ipc");
     };
@@ -4941,15 +4941,16 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
   } else if (auto arg = dyn_cast<ExtractElementInst>(oval)) {
     IRBuilder<> bb(getNewFromOriginal(arg));
     auto ip = invertPointerM(arg->getVectorOperand(), bb);
-
-    auto rule = [&](Value *ip) {
+    Value *index = getNewFromOriginal(arg->getIndexOperand());
+    
+    auto rule = [&bb, &arg](Value *ip, Value *index) {
       return bb.CreateExtractElement(ip,
-                                     getNewFromOriginal(arg->getIndexOperand()),
+                                     index,
                                      arg->getName() + "'ipee");
       ;
     };
 
-    Value *shadow = applyChainRule(arg->getType(), bb, rule, Gradient(ip));
+    Value *shadow = applyChainRule<true>(arg->getType(), bb, rule, Gradient(ip), Primal(index));
 
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, shadow)));
@@ -4978,18 +4979,14 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
     Value *op1 = arg->getOperand(1);
     auto ip0 = invertPointerM(op0, bb);
     auto ip1 = invertPointerM(op1, bb);
+    
+    ArrayRef<int> mask = arg->getShuffleMask();
 
-    auto rule = [&bb, &arg](Value *ip0, Value *ip1) {
-#if LLVM_VERSION_MAJOR >= 11
-      return bb.CreateShuffleVector(ip0, ip1, arg->getShuffleMaskForBitcode(),
-                                    arg->getName() + "'ipsv");
-#else
-      return bb.CreateShuffleVector(ip0, ip1, arg->getOperand(2),
-                                    arg->getName() + "'ipsv");
-#endif
+    auto rule = [&bb, &arg](Value *ip0, Value *ip1, ArrayRef<int> mask) {
+      return bb.CreateShuffleVector(ip0, ip1, mask, arg->getName() + "'ipsv");
     };
 
-    Value *shadow = applyChainRule(arg->getType(), bb, rule, Gradient(ip0), Gradient(ip1));
+    Value *shadow = applyChainRule(arg->getType(), bb, rule, Gradient(ip0), Gradient(ip1), ShuffleMask(mask));
 
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, shadow)));
@@ -5101,9 +5098,9 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
     IRBuilder<> bb(getNewFromOriginal(inst));
     Value *asize = getNewFromOriginal(inst->getArraySize());
 
-    auto rule1 = [&]() {
+    auto rule1 = [&bb, &inst](Type *ty, Value *asize) {
       AllocaInst *antialloca = bb.CreateAlloca(
-          inst->getAllocatedType(), inst->getType()->getPointerAddressSpace(),
+          ty, inst->getType()->getPointerAddressSpace(),
           asize, inst->getName() + "'ipa");
       if (inst->getAlignment()) {
 #if LLVM_VERSION_MAJOR >= 10
@@ -5115,17 +5112,18 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
       return antialloca;
     };
 
-    Value *antialloca = applyChainRule(oval->getType(), bb, rule1);
+    Value *antialloca = applyChainRule(oval->getType(), bb, rule1, Primal(inst->getAllocatedType()), Count(asize));
 
     invertedPointers.insert(std::make_pair(
         (const Value *)oval, InvertedPointerVH(this, antialloca)));
 
     if (auto ci = dyn_cast<ConstantInt>(asize)) {
       if (ci->isOne()) {
+        
+        Constant *c = Constant::getNullValue(inst->getAllocatedType());
 
-        auto rule = [&](Value *antialloca) {
-          StoreInst *st = bb.CreateStore(
-              Constant::getNullValue(inst->getAllocatedType()), antialloca);
+        auto rule = [&bb, &inst](Constant *c, Value *antialloca) {
+          StoreInst *st = bb.CreateStore(c, antialloca);
           if (inst->getAlignment()) {
 #if LLVM_VERSION_MAJOR >= 10
             cast<StoreInst>(st)->setAlignment(Align(inst->getAlignment()));
@@ -5135,7 +5133,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
           }
         };
 
-        applyChainRule(bb, rule, Gradient(antialloca));
+        applyChainRule(bb, rule, Primal(c), Gradient(antialloca));
 
         return antialloca;
       } else {

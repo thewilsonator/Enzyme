@@ -24,59 +24,42 @@ entry:
   ret {<2 x float>, <2 x float>, <2 x float>} %call
 }
 
-; CHECK: define {{[^@]+}}@fwddiffe2square(<4 x float> [[X:%.*]], [2 x <4 x float>] %"x'") 
+
+; CHECK: define internal { <2 x float>, <2 x float>, <2 x float> } @fwddiffe2square(<4 x float> %x, <8 x float> %"x'")
 ; CHECK-NEXT:  entry:
-; CHECK-NEXT:    [[SQ:%.*]] = fmul <4 x float> [[X]], [[X]]
-; CHECK-NEXT:    [[TMP0:%.*]] = extractvalue [2 x <4 x float>] %"x'", 0
-; CHECK-NEXT:    [[TMP1:%.*]] = extractvalue [2 x <4 x float>] %"x'", 0
-; CHECK-NEXT:    [[TMP2:%.*]] = fmul fast <4 x float> [[TMP0]], [[X]]
-; CHECK-NEXT:    [[TMP3:%.*]] = fmul fast <4 x float> [[TMP1]], [[X]]
-; CHECK-NEXT:    [[TMP4:%.*]] = fadd fast <4 x float> [[TMP2]], [[TMP3]]
-; CHECK-NEXT:    [[TMP5:%.*]] = insertvalue [2 x <4 x float>] undef, <4 x float> [[TMP4]], 0
-; CHECK-NEXT:    [[TMP6:%.*]] = extractvalue [2 x <4 x float>] %"x'", 1
-; CHECK-NEXT:    [[TMP7:%.*]] = extractvalue [2 x <4 x float>] %"x'", 1
-; CHECK-NEXT:    [[TMP8:%.*]] = fmul fast <4 x float> [[TMP6]], [[X]]
-; CHECK-NEXT:    [[TMP9:%.*]] = fmul fast <4 x float> [[TMP7]], [[X]]
-; CHECK-NEXT:    [[TMP10:%.*]] = fadd fast <4 x float> [[TMP8]], [[TMP9]]
-; CHECK-NEXT:    [[TMP11:%.*]] = insertvalue [2 x <4 x float>] [[TMP5]], <4 x float> [[TMP10]], 1
-; CHECK-NEXT:    [[CB:%.*]] = fmul <4 x float> [[SQ]], [[X]]
-; CHECK-NEXT:    [[TMP13:%.*]] = extractvalue [2 x <4 x float>] %"x'", 0
-; CHECK-NEXT:    [[TMP14:%.*]] = fmul fast <4 x float> [[TMP4]], [[X]]
-; CHECK-NEXT:    [[TMP15:%.*]] = fmul fast <4 x float> [[TMP13]], [[SQ]]
-; CHECK-NEXT:    [[TMP16:%.*]] = fadd fast <4 x float> [[TMP14]], [[TMP15]]
-; CHECK-NEXT:    [[TMP17:%.*]] = insertvalue [2 x <4 x float>] undef, <4 x float> [[TMP16]], 0
-; CHECK-NEXT:    [[TMP19:%.*]] = extractvalue [2 x <4 x float>] %"x'", 1
-; CHECK-NEXT:    [[TMP20:%.*]] = fmul fast <4 x float> [[TMP10]], [[X]]
-; CHECK-NEXT:    [[TMP21:%.*]] = fmul fast <4 x float> [[TMP19]], [[SQ]]
-; CHECK-NEXT:    [[TMP22:%.*]] = fadd fast <4 x float> [[TMP20]], [[TMP21]]
-; CHECK-NEXT:    [[TMP23:%.*]] = insertvalue [2 x <4 x float>] [[TMP17]], <4 x float> [[TMP22]], 1
-; CHECK-NEXT:    %"id'ipsv" = shufflevector <4 x float> [[TMP4]], <4 x float> [[TMP16]], <4 x i32> <i32 0, i32 1, i32 4, i32 5>
-; CHECK-NEXT:    [[TMP26:%.*]] = insertvalue [2 x <4 x float>] undef, <4 x float> %"id'ipsv", 0
-; CHECK-NEXT:    %"id'ipsv1" = shufflevector <4 x float> [[TMP10]], <4 x float> [[TMP22]], <4 x i32> <i32 0, i32 1, i32 4, i32 5>
-; CHECK-NEXT:    [[TMP29:%.*]] = insertvalue [2 x <4 x float>] [[TMP26]], <4 x float> %"id'ipsv1", 1
-; CHECK-NEXT:    %"res1'ipee" = extractelement <4 x float> %"id'ipsv", i32 1
-; CHECK-NEXT:    [[TMP31:%.*]] = insertvalue [2 x float] undef, float %"res1'ipee", 0
-; CHECK-NEXT:    %"res1'ipee2" = extractelement <4 x float> %"id'ipsv1", i32 1
-; CHECK-NEXT:    [[TMP33:%.*]] = insertvalue [2 x float] [[TMP31]], float %"res1'ipee2", 1
-; CHECK-NEXT:    %"res2'ipee" = extractelement <4 x float> %"id'ipsv", i32 2
-; CHECK-NEXT:    [[TMP35:%.*]] = insertvalue [2 x float] undef, float %"res2'ipee", 0
-; CHECK-NEXT:    %"res2'ipee3" = extractelement <4 x float> %"id'ipsv1", i32 2
-; CHECK-NEXT:    [[TMP37:%.*]] = insertvalue [2 x float] [[TMP35]], float %"res2'ipee3", 1
-; CHECK-NEXT:    %"res3'ipee" = extractelement <4 x float> %"id'ipsv", i32 3
-; CHECK-NEXT:    [[TMP39:%.*]] = insertvalue [2 x float] undef, float %"res3'ipee", 0
-; CHECK-NEXT:    %"res3'ipee4" = extractelement <4 x float> %"id'ipsv1", i32 3
-; CHECK-NEXT:    [[TMP41:%.*]] = insertvalue [2 x float] [[TMP39]], float %"res3'ipee4", 1
-; CHECK-NEXT:    %"agg1'ipiv" = insertvalue { float, float, float } zeroinitializer, float %"res1'ipee", 0
-; CHECK-NEXT:    [[TMP43:%.*]] = insertvalue [2 x { float, float, float }] undef, { float, float, float } %"agg1'ipiv", 0
-; CHECK-NEXT:    %"agg1'ipiv5" = insertvalue { float, float, float } zeroinitializer, float %"res1'ipee2", 0
-; CHECK-NEXT:    [[TMP45:%.*]] = insertvalue [2 x { float, float, float }] [[TMP43]], { float, float, float } %"agg1'ipiv5", 1
-; CHECK-NEXT:    %"agg2'ipiv" = insertvalue { float, float, float } %"agg1'ipiv", float %"res2'ipee", 1
-; CHECK-NEXT:    [[TMP48:%.*]] = insertvalue [2 x { float, float, float }] undef, { float, float, float } %"agg2'ipiv", 0
-; CHECK-NEXT:    %"agg2'ipiv6" = insertvalue { float, float, float } %"agg1'ipiv5", float %"res2'ipee3", 1
-; CHECK-NEXT:    [[TMP51:%.*]] = insertvalue [2 x { float, float, float }] [[TMP48]], { float, float, float } %"agg2'ipiv6", 1
-; CHECK-NEXT:    %"agg3'ipiv" = insertvalue { float, float, float } %"agg2'ipiv", float %"res3'ipee", 2
-; CHECK-NEXT:    [[TMP54:%.*]] = insertvalue [2 x { float, float, float }] undef, { float, float, float } %"agg3'ipiv", 0
-; CHECK-NEXT:    %"agg3'ipiv7" = insertvalue { float, float, float } %"agg2'ipiv6", float %"res3'ipee4", 2
-; CHECK-NEXT:    [[TMP57:%.*]] = insertvalue [2 x { float, float, float }] [[TMP54]], { float, float, float } %"agg3'ipiv7", 1
-; CHECK-NEXT:    ret [2 x { float, float, float }] [[TMP57]]
-;
+; CHECK-NEXT:   %sq = fmul <4 x float> %x, %x
+; CHECK-NEXT:   %x.vecsplat = shufflevector <4 x float> %x, <4 x float> poison, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 0, i32 1, i32 2, i32 3>
+; CHECK-NEXT:   %x.vecsplat1 = shufflevector <4 x float> %x, <4 x float> poison, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 0, i32 1, i32 2, i32 3>
+; CHECK-NEXT:   %0 = fmul fast <8 x float> %"x'", %x.vecsplat1
+; CHECK-NEXT:   %1 = fmul fast <8 x float> %"x'", %x.vecsplat
+; CHECK-NEXT:   %2 = fadd fast <8 x float> %0, %1
+; CHECK-NEXT:   %cb = fmul <4 x float> %sq, %x
+; CHECK-NEXT:   %sq.vecsplat = shufflevector <4 x float> %sq, <4 x float> poison, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 0, i32 1, i32 2, i32 3>
+; CHECK-NEXT:   %x.vecsplat2 = shufflevector <4 x float> %x, <4 x float> poison, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 0, i32 1, i32 2, i32 3>
+; CHECK-NEXT:   %3 = fmul fast <8 x float> %2, %x.vecsplat2
+; CHECK-NEXT:   %4 = fmul fast <8 x float> %"x'", %sq.vecsplat
+; CHECK-NEXT:   %5 = fadd fast <8 x float> %3, %4
+; CHECK-NEXT:   %"id'ipsv" = shufflevector <8 x float> %2, <8 x float> %5, <8 x i32> <i32 0, i32 1, i32 4, i32 5, i32 4, i32 5, i32 8, i32 9>
+; CHECK-NEXT:   %"id'ipsv.subvector.0" = shufflevector <8 x float> %"id'ipsv", <8 x float> poison, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+; CHECK-NEXT:   %"res1'ipee" = extractelement <4 x float> %"id'ipsv.subvector.0", i32 1
+; CHECK-NEXT:   %6 = insertelement <2 x float> undef, float %"res1'ipee", i32 0
+; CHECK-NEXT:   %"id'ipsv.subvector.1" = shufflevector <8 x float> %"id'ipsv", <8 x float> poison, <4 x i32> <i32 4, i32 5, i32 6, i32 7>
+; CHECK-NEXT:   %"res1'ipee3" = extractelement <4 x float> %"id'ipsv.subvector.1", i32 1
+; CHECK-NEXT:   %7 = insertelement <2 x float> %6, float %"res1'ipee3", i32 1
+; CHECK-NEXT:   %"id'ipsv.subvector.04" = shufflevector <8 x float> %"id'ipsv", <8 x float> poison, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+; CHECK-NEXT:   %"res2'ipee" = extractelement <4 x float> %"id'ipsv.subvector.04", i32 2
+; CHECK-NEXT:   %8 = insertelement <2 x float> undef, float %"res2'ipee", i32 0
+; CHECK-NEXT:   %"id'ipsv.subvector.15" = shufflevector <8 x float> %"id'ipsv", <8 x float> poison, <4 x i32> <i32 4, i32 5, i32 6, i32 7>
+; CHECK-NEXT:   %"res2'ipee6" = extractelement <4 x float> %"id'ipsv.subvector.15", i32 2
+; CHECK-NEXT:   %9 = insertelement <2 x float> %8, float %"res2'ipee6", i32 1
+; CHECK-NEXT:   %"id'ipsv.subvector.07" = shufflevector <8 x float> %"id'ipsv", <8 x float> poison, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+; CHECK-NEXT:   %"res3'ipee" = extractelement <4 x float> %"id'ipsv.subvector.07", i32 3
+; CHECK-NEXT:   %10 = insertelement <2 x float> undef, float %"res3'ipee", i32 0
+; CHECK-NEXT:   %"id'ipsv.subvector.18" = shufflevector <8 x float> %"id'ipsv", <8 x float> poison, <4 x i32> <i32 4, i32 5, i32 6, i32 7>
+; CHECK-NEXT:   %"res3'ipee9" = extractelement <4 x float> %"id'ipsv.subvector.18", i32 3
+; CHECK-NEXT:   %11 = insertelement <2 x float> %10, float %"res3'ipee9", i32 1
+; CHECK-NEXT:   %"agg1'ipiv" = insertvalue { <2 x float>, <2 x float>, <2 x float> } zeroinitializer, <2 x float> %7, 0
+; CHECK-NEXT:   %"agg2'ipiv" = insertvalue { <2 x float>, <2 x float>, <2 x float> } %"agg1'ipiv", <2 x float> %9, 1
+; CHECK-NEXT:   %"agg3'ipiv" = insertvalue { <2 x float>, <2 x float>, <2 x float> } %"agg2'ipiv", <2 x float> %11, 2
+; CHECK-NEXT:   ret { <2 x float>, <2 x float>, <2 x float> } %"agg3'ipiv"
+; CHECK-NEXT: }

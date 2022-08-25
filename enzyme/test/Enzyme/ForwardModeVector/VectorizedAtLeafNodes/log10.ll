@@ -20,7 +20,7 @@ entry:
 declare double @llvm.log10.f64(double)
 
 
-define <3 x double> @test_derivative(double %x)
+; CHECK: define <3 x double> @test_derivative(double %x)
 ; CHECK-NEXT: entry:
 ; CHECK-NEXT:   %0 = fmul fast double %x, 0x40026BB1BBB55516
 ; CHECK-NEXT:   %.splatinsert.i = insertelement <3 x double> poison, double %0, i32 0

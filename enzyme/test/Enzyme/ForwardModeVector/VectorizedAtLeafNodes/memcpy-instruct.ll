@@ -32,17 +32,12 @@ attributes #0 = { argmemonly nounwind }
 !5 = !{!"Simple C++ TBAA"}
 
 
-; CHECK: define internal void @fwddiffe3memcpy_ptr(i8* nocapture %dst, [3 x i8*] %"dst'", i8* nocapture readonly %src, [3 x i8*] %"src'", i64 %num)
+; CHECK: define internal void @fwddiffe3memcpy_ptr(i8* nocapture %dst, <3 x i8>* %"dst'", i8* nocapture readonly %src, <3 x i8>* %"src'", i64 %num)
 ; CHECK-NEXT: entry:
-; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %dst, i8* align 8 %src, i64 %num, i1 false)
-; CHECK-NEXT:   %0 = extractvalue [3 x i8*] %"dst'", 0
-; CHECK-NEXT:   %1 = extractvalue [3 x i8*] %"src'", 0
-; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %0, i8* align 8 %1, i64 %num, i1 false)
-; CHECK-NEXT:   %2 = extractvalue [3 x i8*] %"dst'", 1
-; CHECK-NEXT:   %3 = extractvalue [3 x i8*] %"src'", 1
-; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %2, i8* align 8 %3, i64 %num, i1 false)
-; CHECK-NEXT:   %4 = extractvalue [3 x i8*] %"dst'", 2
-; CHECK-NEXT:   %5 = extractvalue [3 x i8*] %"src'", 2
-; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %4, i8* align 8 %5, i64 %num, i1 false)
+; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %dst, i8* align 8 %src, i64 %num, i1 false) #1, !tbaa !0, !tbaa.struct !5
+; CHECK-NEXT:   %num.vecsize = mul i64 3, %num
+; CHECK-NEXT:   %0 = bitcast <3 x i8>* %"dst'" to i8*
+; CHECK-NEXT:   %1 = bitcast <3 x i8>* %"src'" to i8*
+; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 8 %0, i8* align 8 %1, i64 %num.vecsize, i1 false) #1, !tbaa !0, !tbaa.struct !5
 ; CHECK-NEXT:   ret void
 ; CHECK-NEXT: }

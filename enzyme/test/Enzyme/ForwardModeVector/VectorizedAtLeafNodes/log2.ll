@@ -3,8 +3,6 @@
 ; Function Attrs: nounwind
 declare <3 x double> @__enzyme_fwddiff(double (double)*, ...)
 
-; RUN: %opt < %s %loadEnzyme -enzyme -enzyme-preopt=false -O3 -S | FileCheck %s
-
 ; Function Attrs: nounwind readnone uwtable
 define double @tester(double %x) {
 entry:

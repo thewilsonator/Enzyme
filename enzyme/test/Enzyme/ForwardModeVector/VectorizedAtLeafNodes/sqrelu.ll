@@ -40,37 +40,41 @@ attributes #2 = { nounwind uwtable }
 attributes #3 = { nounwind }
 
 
-; CHECK: define dso_local <2 x double> @dsqrelu(double [[X:%.*]])
+; CHECK: define dso_local <2 x double> @dsqrelu(double %x)
 ; CHECK-NEXT:  entry:
-; CHECK-NEXT:    [[CMP_I:%.*]] = fcmp fast ogt double [[X]], 0.000000e+00
-; CHECK-NEXT:    br i1 [[CMP_I]], label [[COND_TRUE_I:%.*]], label [[FWDDIFFE2SQRELU_EXIT:%.*]]
-; CHECK:       cond.true.i:
-; CHECK-NEXT:    [[TMP0:%.*]] = call fast double @llvm.sin.f64(double [[X]]) 
-; CHECK-NEXT:    [[TMP1:%.*]] = call fast double @llvm.cos.f64(double [[X]]) 
-; CHECK-NEXT:    [[TMP2:%.*]] = fmul fast double 1.500000e+00, [[TMP1]]
-; CHECK-NEXT:    [[MUL_I:%.*]] = fmul fast double [[TMP0]], [[X]]
-; CHECK-NEXT:    [[TMP3:%.*]] = fmul fast double [[TMP1]], [[X]]
-; CHECK-NEXT:    [[TMP4:%.*]] = fadd fast double [[TMP3]], [[TMP0]]
-; CHECK-NEXT:    [[TMP5:%.*]] = fmul fast double [[TMP2]], [[X]]
-; CHECK-NEXT:    [[TMP6:%.*]] = fmul fast double 1.500000e+00, [[TMP0]]
-; CHECK-NEXT:    [[TMP7:%.*]] = fadd fast double [[TMP5]], [[TMP6]]
-; CHECK-NEXT:    [[CMP:%.*]] = fcmp fast oeq double [[MUL_I]], 0.000000e+00
-; CHECK-NEXT:    [[TMP8:%.*]] = call fast double @llvm.sqrt.f64(double [[MUL_I]])
-; CHECK-NEXT:    [[TMP9:%.*]] = fmul fast double 5.000000e-01, [[TMP4]]
-; CHECK-NEXT:    [[TMP10:%.*]] = fdiv fast double [[TMP9]], [[TMP8]]
-; CHECK-NEXT:    [[TMP12:%.*]] = select {{(fast )?}}i1 [[CMP]], double 0.000000e+00, double [[TMP10]]
-; CHECK-NEXT:    [[TMP13:%.*]] = insertvalue [2 x double] undef, double [[TMP12]], 0
-; CHECK-NEXT:    [[TMP14:%.*]] = call fast double @llvm.sqrt.f64(double [[MUL_I]]) 
-; CHECK-NEXT:    [[TMP15:%.*]] = fmul fast double 5.000000e-01, [[TMP7]]
-; CHECK-NEXT:    [[TMP16:%.*]] = fdiv fast double [[TMP15]], [[TMP14]]
-; CHECK-NEXT:    [[TMP18:%.*]] = select {{(fast )?}}i1 [[CMP]], double 0.000000e+00, double [[TMP16]]
-; CHECK-NEXT:    [[TMP19:%.*]] = insertvalue [2 x double] [[TMP13]], double [[TMP18]], 1
-; CHECK-NEXT:    br label [[FWDDIFFE2SQRELU_EXIT]]
-; CHECK:       fwddiffe2sqrelu.exit:
-; CHECK-NEXT:    [[TMP20:%.*]] = phi {{(fast )?}}[2 x double] [ [[TMP19]], [[COND_TRUE_I]] ], [ zeroinitializer, [[ENTRY:%.*]] ]
-; CHECK-NEXT:    [[TMP21:%.*]] = extractvalue [2 x double] [[TMP20]], 0
-; CHECK-NEXT:    [[TMP22:%.*]] = insertvalue [[STRUCT_GRADIENTS:%.*]] zeroinitializer, double [[TMP21]], 0
-; CHECK-NEXT:    [[TMP23:%.*]] = extractvalue [2 x double] [[TMP20]], 1
-; CHECK-NEXT:    [[TMP24:%.*]] = insertvalue [[STRUCT_GRADIENTS]] [[TMP22]], double [[TMP23]], 1
-; CHECK-NEXT:    ret [[STRUCT_GRADIENTS]] [[TMP24]]
-;
+; CHECK-NEXT:   %cmp.i = fcmp fast ogt double %x, 0.000000e+00
+; CHECK-NEXT:   br i1 %cmp.i, label %cond.true.i, label %fwddiffe2sqrelu.exit
+
+; CHECK: cond.true.i:                                      ; preds = %entry
+; CHECK-NEXT:   %0 = call fast double @llvm.sin.f64(double %x) #3
+; CHECK-NEXT:   %1 = call fast double @llvm.cos.f64(double %x) #4
+; CHECK-NEXT:   %.splatinsert.i = insertelement <2 x double> poison, double %1, i32 0
+; CHECK-NEXT:   %.splat.i = shufflevector <2 x double> %.splatinsert.i, <2 x double> poison, <2 x i32> zeroinitializer
+; CHECK-NEXT:   %2 = fmul fast <2 x double> <double 1.000000e+00, double 1.500000e+00>, %.splat.i
+; CHECK-NEXT:   %mul.i = fmul fast double %0, %x
+; CHECK-NEXT:   %.splatinsert2.i = insertelement <2 x double> poison, double %0, i32 0
+; CHECK-NEXT:   %.splat3.i = shufflevector <2 x double> %.splatinsert2.i, <2 x double> poison, <2 x i32> zeroinitializer
+; CHECK-NEXT:   %.splatinsert4.i = insertelement <2 x double> poison, double %x, i32 0
+; CHECK-NEXT:   %.splat5.i = shufflevector <2 x double> %.splatinsert4.i, <2 x double> poison, <2 x i32> zeroinitializer
+; CHECK-NEXT:   %3 = fmul fast <2 x double> %2, %.splat5.i
+; CHECK-NEXT:   %4 = fmul fast <2 x double> <double 1.000000e+00, double 1.500000e+00>, %.splat3.i
+; CHECK-NEXT:   %5 = fadd fast <2 x double> %3, %4
+; CHECK-NEXT:   %6 = fcmp fast oeq double %mul.i, 0.000000e+00
+; CHECK-NEXT:   %7 = extractelement <2 x double> %5, i64 0
+; CHECK-NEXT:   %8 = call fast double @llvm.sqrt.f64(double %mul.i) #4
+; CHECK-NEXT:   %9 = fmul fast double 5.000000e-01, %7
+; CHECK-NEXT:   %10 = fdiv fast double %9, %8
+; CHECK-NEXT:   %11 = select fast i1 %6, double 0.000000e+00, double %10
+; CHECK-NEXT:   %12 = insertelement <2 x double> undef, double %11, i32 0
+; CHECK-NEXT:   %13 = extractelement <2 x double> %5, i64 1
+; CHECK-NEXT:   %14 = call fast double @llvm.sqrt.f64(double %mul.i) #4
+; CHECK-NEXT:   %15 = fmul fast double 5.000000e-01, %13
+; CHECK-NEXT:   %16 = fdiv fast double %15, %14
+; CHECK-NEXT:   %17 = select fast i1 %6, double 0.000000e+00, double %16
+; CHECK-NEXT:   %18 = insertelement <2 x double> %12, double %17, i32 1
+; CHECK-NEXT:   br label %fwddiffe2sqrelu.exit
+
+; CHECK: fwddiffe2sqrelu.exit:                             ; preds = %entry, %cond.true.i
+; CHECK-NEXT:   %19 = phi fast <2 x double> [ %18, %cond.true.i ], [ zeroinitializer, %entry ]
+; CHECK-NEXT:   ret <2 x double> %19
+; CHECK-NEXT: }

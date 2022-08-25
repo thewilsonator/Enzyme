@@ -43,6 +43,7 @@
 
 using namespace llvm;
 
+/// Used for example for the size in bytes to allocate
 template <typename T> struct Size {
 private:
   T *value;
@@ -57,7 +58,7 @@ public:
       case VectorModeMemoryLayout::VectorizeAtRootNode:
         return value;
       case VectorModeMemoryLayout::VectorizeAtLeafNodes:
-        return Builder.CreateMul(Builder.getInt32(width), value);
+          return Builder.CreateMul(ConstantInt::get(value->getType(), width), value, value->getName() + ".vecsize");
       }
     
     return value;
@@ -66,6 +67,60 @@ public:
   Value *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                   unsigned width, unsigned i) {
     return value;
+  }
+};
+
+/// Used for example to determine the number of elements allocated.
+template <typename T> struct Count {
+private:
+  T *value;
+
+public:
+  Count(T *value) : value(value) {}
+
+  Value *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
+                  unsigned width) {
+    return value;
+  }
+
+  Value *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
+                  unsigned width, unsigned i) {
+    return value;
+  }
+};
+
+struct ShuffleMask {
+private:
+  SmallVector<int,0> mask;
+
+public:
+  ShuffleMask(ArrayRef<int> mask) : mask(mask.begin(), mask.end()) {}
+
+  SmallVector<int,0> getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
+                  unsigned width) {
+    if (width == 1)
+      return mask;
+    
+    switch (memoryLayout) {
+      case VectorModeMemoryLayout::VectorizeAtRootNode:
+        return mask;
+      case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+        SmallVector<int,0> new_mask;
+        int vector_width = mask.size();
+        for (int i = 0; i < width; ++i) {
+          for (int j = 0; j < vector_width; ++j) {
+            new_mask.push_back(mask[j] + i * vector_width);
+          }
+        }
+        return new_mask;
+      }
+    
+    return mask;
+  }
+
+  SmallVector<int,0> getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
+                  unsigned width, unsigned i) {
+    return mask;
   }
 };
 
@@ -104,13 +159,17 @@ public:
     case VectorModeMemoryLayout::VectorizeAtRootNode:
       return value;
     case VectorModeMemoryLayout::VectorizeAtLeafNodes:
-      return Builder.CreateVectorSplat(width, value);
+        if (auto vty = dyn_cast<VectorType>(value->getType())) {
+          unsigned vector_width = vty->getElementCount().getKnownMinValue();
+          return Builder.CreateShuffleVector(value, GradientUtils::CreateVectorSplatMask(vector_width, width), value->getName() + ".vecsplat");
+        }
+        return Builder.CreateVectorSplat(width, value);
     }
   }
 
   Value *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                   unsigned width, unsigned i) {
-    return getValue(Builder, memoryLayout, width);
+    return value;
   }
 };
 
@@ -131,13 +190,13 @@ public:
     case VectorModeMemoryLayout::VectorizeAtRootNode:
       return type;
     case VectorModeMemoryLayout::VectorizeAtLeafNodes:
-      return FixedVectorType::get(type, width);
+        return GradientUtils::getShadowType(type, width, memoryLayout);
     }
   }
 
   Type *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                  unsigned width, unsigned i) {
-    return getValue(Builder, memoryLayout, width);
+    return type;
   }
 };
 
@@ -165,7 +224,7 @@ public:
 
   ArrayType *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                       unsigned width, unsigned i) {
-    return getValue(Builder, memoryLayout, width);
+    return type;
   }
 };
 
@@ -194,7 +253,7 @@ public:
   FixedVectorType *getValue(IRBuilder<> &Builder,
                             VectorModeMemoryLayout memoryLayout, unsigned width,
                             unsigned i) {
-    return getValue(Builder, memoryLayout, width);
+    return type;
   }
 };
 
@@ -221,7 +280,7 @@ public:
 
   Constant *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                      unsigned width, unsigned i) {
-    return getValue(Builder, memoryLayout, width);
+    return c;
   }
 };
 
@@ -248,7 +307,7 @@ public:
 
   Constant *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                      unsigned width, unsigned i) {
-    return getValue(Builder, memoryLayout, width);
+    return c;
   }
 };
 
@@ -268,7 +327,7 @@ public:
   ConstantVector *getValue(IRBuilder<> &Builder,
                            VectorModeMemoryLayout memoryLayout, unsigned width,
                            unsigned i) {
-    return getValue(Builder, memoryLayout, width);
+    return cv;
   }
 };
 
@@ -288,7 +347,7 @@ public:
   ConstantDataVector *getValue(IRBuilder<> &Builder,
                                VectorModeMemoryLayout memoryLayout,
                                unsigned width, unsigned i) {
-    return getValue(Builder, memoryLayout, width);
+    return cv;
   }
 };
 
@@ -306,10 +365,21 @@ public:
     
     if (!value)
       return nullptr;
-    
-    if (memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode) {
-      assert(cast<ArrayType>(value->getType())->getNumElements() == width);
-      return GradientUtils::extractMeta(Builder, value, i);
+  
+    switch (memoryLayout) {
+      case VectorModeMemoryLayout::VectorizeAtRootNode:
+        assert(cast<ArrayType>(value->getType())->getNumElements() == width);
+        return GradientUtils::extractMeta(Builder, value, i);
+      case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+        if (auto vty = dyn_cast<VectorType>(value->getType())) {
+          unsigned vector_width = vty->getElementCount().getKnownMinValue();
+          if (vector_width / width > 1) {
+            return Builder.CreateShuffleVector(value, GradientUtils::CreateExtractSubvectorMask(vector_width, width, i), value->getName() + ".subvector." + Twine(i));
+          } else {
+            return Builder.CreateExtractElement(value, i);
+          }
+        }
+        return value;
     }
 
     return value;

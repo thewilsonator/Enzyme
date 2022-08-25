@@ -1869,10 +1869,27 @@ public:
     return Builder.CreateExtractValue(Agg, {off});
   }
   
-  static inline SmallVector<int,0> createMaskForConcatenation(unsigned vector_length, unsigned width) {
+  static inline SmallVector<int,0> CreateVectorSplatMask(unsigned vector_length, unsigned width) {
     SmallVector<int,0> Mask;
     for (int i = 0; i < vector_length * width; ++i)
+      Mask.push_back(i % vector_length);
+    
+    return Mask;
+  }
+  
+  static inline SmallVector<int,0> CreateVectorConcatenationMask(unsigned length1, unsigned length2) {
+    SmallVector<int,0> Mask;
+    for (int i = 0; i < length1 + length2; ++i)
       Mask.push_back(i);
+    
+    return Mask;
+  }
+  
+  static inline SmallVector<int,0> CreateExtractSubvectorMask(unsigned vector_length, unsigned width, unsigned index) {
+    SmallVector<int,0> Mask;
+    assert(vector_length / width > 1);
+    for (int i = 0; i < vector_length / width ; ++i)
+      Mask.push_back(index * (vector_length / width) + i);
     
     return Mask;
   }
@@ -1897,8 +1914,10 @@ public:
           auto diff = rule(args.getValue(Builder, memoryLayout, width, i)...);
           if (res) {
             VectorType *rvty = cast<VectorType>(res->getType());
-            SmallVector<int,0> Mask = createMaskForConcatenation(rvty->getElementCount().getKnownMinValue(), width);
-            res = Builder.CreateShuffleVector(res, diff, Mask);
+            VectorType *dvty = cast<VectorType>(diff->getType());
+            SmallVector<int,0> Mask = CreateVectorConcatenationMask(rvty->getElementCount().getKnownMinValue(), dvty->getElementCount().getKnownMinValue());
+            auto extended = Builder.CreateShuffleVector(res, CreateVectorConcatenationMask(rvty->getElementCount().getKnownMinValue(), 0), diff->getName() + ".vecpad");
+            res = Builder.CreateShuffleVector(res, extended, Mask, diff->getName() + ".vecconcat");
           } else {
             res = diff;
           }
@@ -1921,10 +1940,9 @@ public:
   /// function f to each element. Return values of f are collected and wrapped.
   template <bool forceScalar = false, typename Func, typename... Args>
   void applyChainRule(IRBuilder<> &Builder, Func rule, Args... args) {
-    unsigned actualWidth = memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes ? 1 : width;
     
-    if (actualWidth > 1) {
-      for (unsigned int i = 0; i < actualWidth; ++i) {
+    if (width > 1 && (forceScalar || memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode)) {
+      for (unsigned int i = 0; i < width; ++i) {
         rule(args.getValue(Builder, memoryLayout, width, i)...);
       }
     } else {
