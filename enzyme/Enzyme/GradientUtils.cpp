@@ -154,7 +154,7 @@ SmallVector<unsigned int, 9> MD_ToCopy = {
 
     size_t idx = 0;
 
-    auto rule = [&](Value *ptr, Value *newval) {
+    auto rule = [&](Value *ptr, Value *newval, Value *mask) {
       if (!mask) {
         auto ts = BuilderM.CreateStore(newval, ptr);
         if (align)
@@ -212,7 +212,7 @@ SmallVector<unsigned int, 9> MD_ToCopy = {
       idx++;
     };
 
-    applyChainRule(BuilderM, rule, Gradient(ptr), Gradient(newval));
+    applyChainRule(BuilderM, rule, Gradient(ptr), Gradient(newval), Primal(mask));
   }
 
 #if LLVM_VERSION_MAJOR >= 10
@@ -5193,31 +5193,35 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
     case Intrinsic::nvvm_ldu_global_f:
     case Intrinsic::nvvm_ldg_global_i:
     case Intrinsic::nvvm_ldg_global_p:
-    case Intrinsic::nvvm_ldg_global_f: {
-      return applyChainRule(
-          II->getType(), bb,
-          [&](Value *ptr) {
-            Value *args[] = {ptr};
-            auto li = bb.CreateCall(II->getCalledFunction(), args);
-            li->copyMetadata(*II, MD_ToCopy);
-            li->setDebugLoc(getNewFromOriginal(II->getDebugLoc()));
-            return li;
-          },
-                            Gradient(invertPointerM(II->getArgOperand(0), bb)));
-    case Intrinsic::masked_load:
-      return applyChainRule(
-          II->getType(), bb,
-          [&](Value *ptr, Value *defaultV) {
-            Value *args[] = {ptr, getNewFromOriginal(II->getArgOperand(1)),
-                             getNewFromOriginal(II->getArgOperand(2)),
-                             defaultV};
-            auto li = bb.CreateCall(II->getCalledFunction(), args);
-            li->copyMetadata(*II, MD_ToCopy);
-            li->setDebugLoc(getNewFromOriginal(II->getDebugLoc()));
-            return li;
-          },
-                            Gradient(invertPointerM(II->getArgOperand(0), bb)),
-                                     Gradient(invertPointerM(II->getArgOperand(3), bb, nullShadow)));
+      case Intrinsic::nvvm_ldg_global_f: {
+        auto rule = [&](Value *ptr) {
+          Value *args[] = {ptr};
+          auto li = bb.CreateCall(II->getCalledFunction(), args);
+          li->copyMetadata(*II, MD_ToCopy);
+          li->setDebugLoc(getNewFromOriginal(II->getDebugLoc()));
+          return li;
+        };
+        return applyChainRule(II->getType(), bb, rule, Gradient(invertPointerM(II->getArgOperand(0), bb)));
+      }
+    case Intrinsic::masked_load: {
+      auto rule = [&](Value *ptr, Value *align, Value *mask, Value *defaultV, Type* diffType) {
+        Value *args[] = {ptr, align, mask, defaultV};
+        Type *tys[] = {diffType, ptr->getType()};
+        auto F = Intrinsic::getDeclaration(oldFunc->getParent(),
+                                           Intrinsic::masked_load, tys);
+                
+        auto li = bb.CreateCall(F, args);
+        li->copyMetadata(*II, MD_ToCopy);
+        li->setDebugLoc(getNewFromOriginal(II->getDebugLoc()));
+        return li;
+      };
+      
+      auto ptr = invertPointerM(II->getArgOperand(0), bb);
+      auto align = getNewFromOriginal(II->getArgOperand(1));
+      auto mask = getNewFromOriginal(II->getArgOperand(2));
+      auto defaultV = invertPointerM(II->getArgOperand(3), bb, nullShadow);
+      
+      return applyChainRule(II->getType(), bb, rule, Gradient(ptr), Count(align), BitMask(mask), Gradient(defaultV), Primal(II->getType()));
     }
     }
   } else if (auto phi = dyn_cast<PHINode>(oval)) {

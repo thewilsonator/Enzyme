@@ -89,12 +89,13 @@ public:
   }
 };
 
+template<typename T>
 struct ShuffleMask {
 private:
   SmallVector<int,0> mask;
 
 public:
-  ShuffleMask(ArrayRef<int> mask) : mask(mask.begin(), mask.end()) {}
+  ShuffleMask(T mask) : mask(mask.begin(), mask.end()) {}
 
   SmallVector<int,0> getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                   unsigned width) {
@@ -123,6 +124,81 @@ public:
     return mask;
   }
 };
+
+template<>
+struct ShuffleMask<Value*> {
+private:
+  Value* mask;
+
+public:
+  ShuffleMask(Value* mask) : mask(mask) {}
+
+  Value* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
+                  unsigned width) {
+    if (width == 1)
+      return mask;
+    
+    switch (memoryLayout) {
+      case VectorModeMemoryLayout::VectorizeAtRootNode:
+        return mask;
+      case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+        auto vec = cast<ConstantVector>(mask);
+          unsigned vector_width = vec->getType()->getNumElements();
+          SmallVector<Constant*,0> new_mask;
+          for (int i = 0; i < width; ++i) {
+            for (int j = 0; j < vector_width; ++j) {
+              auto val = cast<ConstantInt>(vec->getOperand(j))->getValue();
+              auto add = val + i * vector_width;
+              new_mask.push_back(Builder.getInt(add));
+            }
+          }
+          return ConstantVector::get(new_mask);
+        }
+    return mask;
+  }
+
+  Value* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
+                  unsigned width, unsigned i) {
+    return mask;
+  }
+};
+
+/// Unlike ShuffleMask, BitMask is non-constant
+struct BitMask {
+private:
+  Value* mask;
+
+public:
+  BitMask(Value* mask) : mask(mask) {}
+
+  Value* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
+                  unsigned width) {
+    if (width == 1)
+      return mask;
+    
+    if (!mask)
+      return nullptr;
+    
+    switch (memoryLayout) {
+      case VectorModeMemoryLayout::VectorizeAtRootNode:
+        return mask;
+      case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+        auto vty = cast<FixedVectorType>(mask->getType());
+        unsigned vector_width = vty->getNumElements();
+        auto splatMask = GradientUtils::CreateVectorSplatMask(vector_width, width);
+        return Builder.CreateShuffleVector(mask, splatMask, mask->getName() + ".vecsplat");
+    }
+    
+    return mask;
+  }
+
+  Value* getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
+                  unsigned width, unsigned i) {
+    return mask;
+  }
+};
+
+
 
 template <typename T> struct Condition {
 private:

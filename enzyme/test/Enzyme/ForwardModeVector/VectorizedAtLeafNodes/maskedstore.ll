@@ -23,17 +23,10 @@ entry:
 }
 
 
-; CHECK: define internal void @fwddiffe3loader(<2 x double>* %ptr, [3 x <2 x double>*] %"ptr'", <2 x i1> %mask, <2 x double> %val, [3 x <2 x double>] %"val'")
+; CHECK: define internal void @fwddiffe3loader(<2 x double>* %ptr, <6 x double>* %"ptr'", <2 x i1> %mask, <2 x double> %val, <6 x double> %"val'")
 ; CHECK-NEXT: entry:
-; CHECK-NEXT:   call void @llvm.masked.store.v2f64.p0v2f64(<2 x double> %val, <2 x double>* %ptr, i32 16, <2 x i1> %mask)
-; CHECK-NEXT:   %0 = extractvalue [3 x <2 x double>*] %"ptr'", 0
-; CHECK-NEXT:   %1 = extractvalue [3 x <2 x double>] %"val'", 0
-; CHECK-NEXT:   call void @llvm.masked.store.v2f64.p0v2f64(<2 x double> %1, <2 x double>* %0, i32 16, <2 x i1> %mask)
-; CHECK-NEXT:   %2 = extractvalue [3 x <2 x double>*] %"ptr'", 1
-; CHECK-NEXT:   %3 = extractvalue [3 x <2 x double>] %"val'", 1
-; CHECK-NEXT:   call void @llvm.masked.store.v2f64.p0v2f64(<2 x double> %3, <2 x double>* %2, i32 16, <2 x i1> %mask)
-; CHECK-NEXT:   %4 = extractvalue [3 x <2 x double>*] %"ptr'", 2
-; CHECK-NEXT:   %5 = extractvalue [3 x <2 x double>] %"val'", 2
-; CHECK-NEXT:   call void @llvm.masked.store.v2f64.p0v2f64(<2 x double> %5, <2 x double>* %4, i32 16, <2 x i1> %mask)
+; CHECK-NEXT:   call void @llvm.masked.store.v2f64.p0v2f64(<2 x double> %val, <2 x double>* %ptr, i32 16, <2 x i1> %mask) #2
+; CHECK-NEXT:   %mask.vecsplat = shufflevector <2 x i1> %mask, <2 x i1> poison, <6 x i32> <i32 0, i32 1, i32 0, i32 1, i32 0, i32 1>
+; CHECK-NEXT:   call void @llvm.masked.store.v6f64.p0v6f64(<6 x double> %"val'", <6 x double>* %"ptr'", i32 16, <6 x i1> %mask.vecsplat)
 ; CHECK-NEXT:   ret void
 ; CHECK-NEXT: }
