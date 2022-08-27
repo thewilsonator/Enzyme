@@ -4612,7 +4612,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
             IRBuilder<> bb(inversionAllocs);
             Type *allocaTy = arg->getValueType();
 
-            auto rule1 = [&]() {
+            auto rule1 = [&bb, &arg](Type* allocaTy) {
               AllocaInst *antialloca = bb.CreateAlloca(
                   allocaTy, arg->getType()->getPointerAddressSpace(), nullptr,
                   arg->getName() + "'ipa");
@@ -4626,21 +4626,20 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
               return antialloca;
             };
 
-            Value *antialloca = applyChainRule(arg->getType(), bb, rule1);
+            Value *antialloca = applyChainRule(arg->getType(), bb, rule1, Primal(allocaTy));
 
             invertedPointers.insert(std::make_pair(
                 (const Value *)oval, InvertedPointerVH(this, antialloca)));
+            
+            Type *ty = Type::getInt8PtrTy(arg->getContext());
+            ConstantInt *val_arg = ConstantInt::get(Type::getInt8Ty(arg->getContext()), 0);
+            ConstantInt *len_arg = ConstantInt::get(Type::getInt64Ty(arg->getContext()), M->getDataLayout().getTypeAllocSizeInBits(
+                                     arg->getValueType()) / 8);
 
-            auto rule2 = [&](Value *antialloca) {
-              auto dst_arg = bb.CreateBitCast(
-                  antialloca, Type::getInt8PtrTy(arg->getContext()));
-              auto val_arg =
-                  ConstantInt::get(Type::getInt8Ty(arg->getContext()), 0);
-              auto len_arg =
-                  ConstantInt::get(Type::getInt64Ty(arg->getContext()),
-                                   M->getDataLayout().getTypeAllocSizeInBits(
-                                       arg->getValueType()) /
-                                       8);
+            auto rule2 = [&bb, &arg, &M, &oval](Value *antialloca, Type *ty, ConstantInt *val_arg, ConstantInt *len_arg) {
+              auto dst_arg = bb.CreateBitCast(antialloca, ty);
+              
+              
               auto volatile_arg = ConstantInt::getFalse(oval->getContext());
 
 #if LLVM_VERSION_MAJOR == 6
@@ -4653,8 +4652,8 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
               Value *args[] = {dst_arg, val_arg, len_arg, volatile_arg};
 #endif
               Type *tys[] = {dst_arg->getType(), len_arg->getType()};
-              auto memset = cast<CallInst>(bb.CreateCall(
-                  Intrinsic::getDeclaration(M, Intrinsic::memset, tys), args));
+              auto F = Intrinsic::getDeclaration(M, Intrinsic::memset, tys);
+              auto memset = cast<CallInst>(bb.CreateCall(F, args));
 #if LLVM_VERSION_MAJOR >= 10
               if (arg->getAlignment()) {
                 memset->addParamAttr(
@@ -4669,13 +4668,14 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
               }
 #endif
               memset->addParamAttr(0, Attribute::NonNull);
-              assert((width > 1 && antialloca->getType() ==
-                                       ArrayType::get(arg->getType(), width)) ||
-                     antialloca->getType() == arg->getType());
               return antialloca;
             };
+            
+            antialloca = applyChainRule(arg->getType(), bb, rule2, Gradient(antialloca), Count(ty), Count(val_arg), Size(len_arg));
+            
+            assert(antialloca->getType() == getShadowType(arg->getType()));
 
-            return applyChainRule(arg->getType(), bb, rule2, Gradient(antialloca));
+            return antialloca;
           }
         }
       }
@@ -4728,11 +4728,12 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
           arg->isConstant()) {
         Type *elemTy = arg->getType()->getPointerElementType();
         IRBuilder<> B(inversionAllocs);
-
-        auto rule = [&]() {
+        
+        auto rule = [&](Type *elemTy) {
+          auto c = Constant::getNullValue(elemTy);
           auto shadow = new GlobalVariable(
               *arg->getParent(), elemTy, arg->isConstant(), arg->getLinkage(),
-              Constant::getNullValue(elemTy), arg->getName() + "_shadow", arg,
+              c, arg->getName() + "_shadow", arg,
               arg->getThreadLocalMode(), arg->getType()->getAddressSpace(),
               arg->isExternallyInitialized());
           arg->setMetadata("enzyme_shadow",
@@ -4748,17 +4749,16 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
           return shadow;
         };
 
-        Value *shadow = applyChainRule(oval->getType(), BuilderM, rule);
+        Value *shadow = applyChainRule(oval->getType(), BuilderM, rule, Primal(elemTy));
 
         if (arg->hasInitializer()) {
-          applyChainRule(
-              BuilderM,
-              [&](Value *shadow, Value *ip) {
-                cast<GlobalVariable>(shadow)->setInitializer(
-                    cast<Constant>(ip));
-              },
-                         Gradient(shadow),
-                                  Gradient(invertPointerM(arg->getInitializer(), B, /*nullShadow*/ true)));
+          auto rule = [&](Value *shadow, Value *ip) {
+            cast<GlobalVariable>(shadow)->setInitializer(
+                cast<Constant>(ip));
+          };
+          
+          auto ip = invertPointerM(arg->getInitializer(), B, /*nullShadow*/ true);
+          applyChainRule(BuilderM, rule, Gradient(shadow), Gradient(ip));
         }
 
         invertedPointers.insert(std::make_pair(
@@ -4788,7 +4788,16 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
     assert(md2->getNumOperands() == 1);
     auto gvemd = cast<ConstantAsMetadata>(md2->getOperand(0));
     auto cs = cast<Constant>(gvemd->getValue());
+    
+    auto rule = [](Value *cs) { return cs; };
+    
+    auto dif = applyChainRule(arg->getType(), BuilderM, rule, Gradient(cast<Value>(cs)));
 
+    invertedPointers.insert(
+        std::make_pair((const Value *)oval, InvertedPointerVH(this, dif)));
+    
+    return dif;
+    
     if (width > 1) {
       SmallVector<Constant *, 2> Vals;
       for (unsigned i = 0; i < width; ++i) {
@@ -4815,15 +4824,11 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
   } else if (auto fn = dyn_cast<Function>(oval)) {
     Constant *shadow = GetOrCreateShadowFunction(
         Logic, TLI, TA, fn, mode, memoryLayout, width, AtomicAdd);
-    if (width > 1) {
-      SmallVector<Constant *, 3> arr;
-      for (unsigned i = 0; i < width; ++i) {
-        arr.push_back(shadow);
-      }
-      ArrayType *arrTy = ArrayType::get(shadow->getType(), width);
-      shadow = ConstantArray::get(arrTy, arr);
-    }
-    return shadow;
+    
+    auto rule = [](Constant *shadow) { return shadow; };
+
+    return applyChainRule(oval->getType(), BuilderM, rule, Primal(shadow));
+    
   } else if (auto arg = dyn_cast<CastInst>(oval)) {
     IRBuilder<> bb(getNewFromOriginal(arg));
     Value *invertOp = invertPointerM(arg->getOperand(0), bb);

@@ -53,7 +53,13 @@ public:
 
   Value *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                   unsigned width) {
-    if (value && width > 1)
+    
+      if (!value)
+        return nullptr;
+        
+      if (width == 1)
+        return value;
+    
       switch (memoryLayout) {
       case VectorModeMemoryLayout::VectorizeAtRootNode:
         return value;
@@ -70,6 +76,37 @@ public:
   }
 };
 
+template <> struct Size<ConstantInt> {
+private:
+  ConstantInt *value;
+
+public:
+  Size(ConstantInt *value) : value(value) {}
+
+  ConstantInt *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
+                  unsigned width) {
+    if (!value)
+      return nullptr;
+      
+    if (width == 1)
+      return value;
+    
+      switch (memoryLayout) {
+      case VectorModeMemoryLayout::VectorizeAtRootNode:
+        return value;
+      case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+          return Builder.getInt(value->getValue() * width);
+      }
+    
+    return value;
+  }
+
+  ConstantInt *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
+                  unsigned width, unsigned i) {
+    return value;
+  }
+};
+
 /// Used for example to determine the number of elements allocated.
 template <typename T> struct Count {
 private:
@@ -78,12 +115,12 @@ private:
 public:
   Count(T *value) : value(value) {}
 
-  Value *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
+  T *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                   unsigned width) {
     return value;
   }
 
-  Value *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
+  T *getValue(IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout,
                   unsigned width, unsigned i) {
     return value;
   }
@@ -293,7 +330,7 @@ public:
       return type;
       case VectorModeMemoryLayout::VectorizeAtLeafNodes: {
         Type *ty = GradientUtils::getShadowType(type->getElementType(), width, memoryLayout);
-        return ArrayType::get(ty, width);
+        return ArrayType::get(ty, type->getNumElements());
       }
     }
   }
@@ -476,6 +513,56 @@ public:
   }
 };
 
+//template <> struct Gradient<Constant> {
+//private:
+//  Constant *c;
+//
+//public:
+//  Gradient(Constant *c) : c(c) {}
+//
+//  Constant *getValue(IRBuilder<> &Builder,
+//                                VectorModeMemoryLayout memoryLayout,
+//                                unsigned width, unsigned i) {
+//    if (!c)
+//      return nullptr;
+//    
+//    if (width == 1)
+//      return c;
+//    
+//    switch (memoryLayout) {
+//      case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+//        assert(false); //TODO
+//        break;
+//      case VectorModeMemoryLayout::VectorizeAtRootNode:
+//        assert(cast<ConstantArray>(c)->getType()->getNumElements() == width);
+//        return cast<ConstantArray>(c)->getAggregateElement(i);
+//    }
+//
+//    return c;
+//  }
+//
+//  Constant *getValue(IRBuilder<> &Builder,
+//                                VectorModeMemoryLayout memoryLayout,
+//                                unsigned width) {
+//    if (!c)
+//      return nullptr;
+//    
+//    if (width == 1)
+//      return c;
+//    
+//    switch (memoryLayout) {
+//      case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+//        break;
+//      case VectorModeMemoryLayout::VectorizeAtRootNode:
+//        assert(cast<ArrayType>(c->getType())->getNumElements() == width);
+//        break;
+//    }
+//
+//    return c;
+//  }
+//  
+//};
+
 template <> struct Gradient<ArrayRef<Constant *>> {
 private:
   ArrayRef<Constant *> values;
@@ -489,17 +576,24 @@ public:
     if (width == 1)
       return values;
     
-    if (memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode ||
-        memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes) {
-      std::vector<Constant*> vals;
-      for (auto &&val : values) {
-        assert(cast<ArrayType>(val->getType())->getNumElements() == width);
-        if (val)
-          vals.push_back(cast<Constant>(GradientUtils::extractMeta(Builder, val, i)));
-        else
-          vals.push_back(nullptr);
+    switch (memoryLayout) {
+      case VectorModeMemoryLayout::VectorizeAtRootNode: {
+        std::vector<Constant*> vals;
+        for (auto &&val : values) {
+          if (val)
+            vals.push_back(cast<Constant>(GradientUtils::extractMeta(Builder, val, i)));
+          else
+            vals.push_back(nullptr);
+        }
+        return vals;
       }
-      return vals;
+      case VectorModeMemoryLayout::VectorizeAtLeafNodes: {
+        std::vector<Constant*> vals;
+        for (auto &&val : values) {
+          vals.push_back(cast_or_null<Constant>(val));
+        }
+        return vals;
+      }
     }
 
     return values;
@@ -513,7 +607,6 @@ public:
     
     switch (memoryLayout) {
       case VectorModeMemoryLayout::VectorizeAtLeafNodes:
-        assert(false);
         break;
       case VectorModeMemoryLayout::VectorizeAtRootNode:
         for (auto &&val : values) {

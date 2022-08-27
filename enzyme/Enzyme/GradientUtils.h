@@ -1822,6 +1822,9 @@ public:
           getShadowTypeVectorizedAtLeafNodes(aty->getElementType(), width),
           aty->getNumElements());
     } else if (auto pty = dyn_cast<PointerType>(ty)) {
+      if (pty->getElementType()->isFunctionTy())
+        return VectorType::get(pty, width, false);
+      
       return PointerType::get(
                               getShadowTypeVectorizedAtLeafNodes(pty->getElementType(), width),
                               pty->getAddressSpace());

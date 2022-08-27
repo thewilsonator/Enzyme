@@ -10528,18 +10528,18 @@ public:
           IRBuilder<> Builder2(&call);
           getForwardBuilder(Builder2);
 
-          SmallVector<Value *, 2> args;
-#if LLVM_VERSION_MAJOR >= 14
-          for (unsigned i = 0; i < orig->arg_size(); ++i)
-#else
-          for (unsigned i = 0; i < orig->getNumArgOperands(); ++i)
-#endif
-          {
-            auto arg = orig->getArgOperand(i);
-            args.push_back(gutils->getNewFromOriginal(arg));
-          }
-
           auto rule = [&]() {
+            SmallVector<Value *, 2> args;
+  #if LLVM_VERSION_MAJOR >= 14
+            for (unsigned i = 0; i < orig->arg_size(); ++i)
+  #else
+            for (unsigned i = 0; i < orig->getNumArgOperands(); ++i)
+  #endif
+            {
+              auto arg = orig->getArgOperand(i);
+              args.push_back(gutils->getNewFromOriginal(arg));
+            }
+            
             CallInst *CI = Builder2.CreateCall(orig->getFunctionType(),
                                                orig->getCalledFunction(), args);
             CI->setAttributes(orig->getAttributes());
@@ -10549,7 +10549,7 @@ public:
             return CI;
           };
 
-          Value *CI = applyChainRule<true>(call.getType(), Builder2, rule);
+          Value *CI = applyChainRule(call.getType(), Builder2, rule);
 
           auto found = gutils->invertedPointers.find(orig);
           PHINode *placeholder = cast<PHINode>(&*found->second);
@@ -11267,7 +11267,15 @@ public:
         newcalled = gutils->invertPointerM(callval, BuilderZ);
 
         if (gutils->getWidth() > 1) {
-          newcalled = BuilderZ.CreateExtractValue(newcalled, {0});
+          switch (MemoryLayout) {
+            case VectorModeMemoryLayout::VectorizeAtRootNode:
+              newcalled = BuilderZ.CreateExtractValue(newcalled, {0});
+              break;
+            case VectorModeMemoryLayout::VectorizeAtLeafNodes:
+              newcalled = BuilderZ.CreateExtractElement(newcalled, BuilderZ.getInt32(0));
+              break;
+          }
+          
         }
 
         ErrorIfRuntimeInactive(
