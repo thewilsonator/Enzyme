@@ -2862,15 +2862,15 @@ public:
               break;
             }
             if (ET->isFPOrFPVectorTy()) {
-              vd = TypeTree(ConcreteType(ET->getScalarType())).Only(0);
+              vd = TypeTree(ConcreteType(ET->getScalarType())).Only(0, &MS);
               goto known;
             }
             if (ET->isPointerTy()) {
-              vd = TypeTree(BaseType::Pointer).Only(0);
+              vd = TypeTree(BaseType::Pointer).Only(0, &MS);
               goto known;
             }
             if (ET->isIntOrIntVectorTy()) {
-              vd = TypeTree(BaseType::Integer).Only(0);
+              vd = TypeTree(BaseType::Integer).Only(0, &MS);
               goto known;
             }
           }
@@ -2878,7 +2878,7 @@ public:
         if (auto gep = dyn_cast<GetElementPtrInst>(MS.getOperand(0))) {
           if (auto AT = dyn_cast<ArrayType>(gep->getSourceElementType())) {
             if (AT->getElementType()->isIntegerTy()) {
-              vd = TypeTree(BaseType::Integer).Only(0);
+              vd = TypeTree(BaseType::Integer).Only(0, &MS);
               goto known;
             }
           }
@@ -2886,7 +2886,7 @@ public:
         EmitWarning("CannotDeduceType", MS.getDebugLoc(), gutils->oldFunc,
                     MS.getParent(), &MS, "failed to deduce type of memset ",
                     MS);
-        vd = TypeTree(BaseType::Pointer).Only(0);
+        vd = TypeTree(BaseType::Pointer).Only(0, &MS);
         goto known;
       }
       if (CustomErrorHandler) {
@@ -3182,15 +3182,15 @@ public:
                 break;
               }
               if (ET->isFPOrFPVectorTy()) {
-                vd = TypeTree(ConcreteType(ET->getScalarType())).Only(0);
+                vd = TypeTree(ConcreteType(ET->getScalarType())).Only(0, &MTI);
                 goto known;
               }
               if (ET->isPointerTy()) {
-                vd = TypeTree(BaseType::Pointer).Only(0);
+                vd = TypeTree(BaseType::Pointer).Only(0, &MTI);
                 goto known;
               }
               if (ET->isIntOrIntVectorTy()) {
-                vd = TypeTree(BaseType::Integer).Only(0);
+                vd = TypeTree(BaseType::Integer).Only(0, &MTI);
                 goto known;
               }
             }
@@ -3198,7 +3198,7 @@ public:
           if (auto gep = dyn_cast<GetElementPtrInst>(val)) {
             if (auto AT = dyn_cast<ArrayType>(gep->getSourceElementType())) {
               if (AT->getElementType()->isIntegerTy()) {
-                vd = TypeTree(BaseType::Integer).Only(0);
+                vd = TypeTree(BaseType::Integer).Only(0, &MTI);
                 goto known;
               }
             }
@@ -3207,7 +3207,7 @@ public:
         EmitWarning("CannotDeduceType", MTI.getDebugLoc(), gutils->oldFunc,
                     MTI.getParent(), &MTI, "failed to deduce type of copy ",
                     MTI);
-        vd = TypeTree(BaseType::Pointer).Only(0);
+        vd = TypeTree(BaseType::Pointer).Only(0, &MTI);
         goto known;
       }
       if (CustomErrorHandler) {
@@ -5234,7 +5234,7 @@ public:
                                          ->getSrcTy()
                                          ->getPointerElementType()
                                          ->getScalarType()))
-                   .Only(0);
+                   .Only(0, &call);
           goto knownF;
         }
       }

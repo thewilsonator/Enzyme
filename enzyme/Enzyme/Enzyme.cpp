@@ -694,12 +694,12 @@ static bool replaceOriginalCall(CallInst *CI, Function *fn, Value *diffret,
         }
       } else {
         auto &DL = fn->getParent()->getDataLayout();
-        if (DL.getTypeSizeInBits(stype->getElementType()) !=
+        if (DL.getTypeSizeInBits(stype->getPointerElementType()) !=
             DL.getTypeSizeInBits(diffret->getType())) {
           EmitFailure("IllegalReturnCast", CI->getDebugLoc(), CI,
                       "Cannot cast return type of gradient ",
                       *diffret->getType(), *diffret, ", to desired type ",
-                      *stype->getElementType());
+                      *stype->getPointerElementType());
           return false;
         }
         Builder.CreateStore(
@@ -1499,16 +1499,16 @@ public:
       } else if (a.getType()->isPointerTy()) {
         auto et = a.getType()->getPointerElementType();
         if (et->isFPOrFPVectorTy()) {
-          dt = TypeTree(ConcreteType(et->getScalarType())).Only(-1);
+          dt = TypeTree(ConcreteType(et->getScalarType())).Only(-1, nullptr);
         } else if (et->isPointerTy()) {
-          dt = TypeTree(ConcreteType(BaseType::Pointer)).Only(-1);
+          dt = TypeTree(ConcreteType(BaseType::Pointer)).Only(-1, nullptr);
         }
         dt.insert({}, BaseType::Pointer);
       } else if (a.getType()->isIntOrIntVectorTy()) {
         dt = ConcreteType(BaseType::Integer);
       }
       type_args.Arguments.insert(
-          std::pair<Argument *, TypeTree>(&a, dt.Only(-1)));
+          std::pair<Argument *, TypeTree>(&a, dt.Only(-1, nullptr)));
       // TODO note that here we do NOT propagate constants in type info (and
       // should consider whether we should)
       type_args.KnownValues.insert(
