@@ -1168,7 +1168,7 @@ public:
       case DerivativeMode::ForwardModeSplit:
       case DerivativeMode::ForwardMode: {
         Value *sretPt = CI->getArgOperand(0);
-        if (width > 1) {
+        if (width > 1 && !EnzymeVectorizeAtLeafNodes) {
           PointerType *pty = cast<PointerType>(sretPt->getType());
           if (auto sty = dyn_cast<StructType>(pty->getPointerElementType())) {
             Value *acc = UndefValue::get(
@@ -1192,6 +1192,8 @@ public:
                 width, "elements of the same type.");
             return false;
           }
+        } else if (width > 1) {
+          shadow = Builder.CreatePointerCast(sretPt, GradientUtils::getShadowType(primal->getType(), width, VectorModeMemoryLayout::VectorizeAtLeafNodes));
         } else {
           shadow = sretPt;
         }

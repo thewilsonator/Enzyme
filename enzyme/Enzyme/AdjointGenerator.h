@@ -10993,12 +10993,18 @@ public:
           auto tofree = gutils->invertPointerM(origfree, Builder2);
 
           Function *free = getOrInsertCheckedFree(
-              *orig->getModule(), orig, newfree->getType(), gutils->getWidth());
+              *orig->getModule(), orig, newfree->getType(), gutils->getWidth(), MemoryLayout);
 
           SmallVector<Value *, 3> args;
           args.push_back(newfree);
 
-          auto rule = [&args](Value *tofree) { args.push_back(tofree); };
+          auto rule = [&](Value *tofree) {
+            if (MemoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes)
+              tofree = Builder2.CreatePointerCast(tofree,  PointerType::getInt8PtrTy(tofree->getContext()));
+
+            args.push_back(tofree);
+          };
+          
           applyChainRule(Builder2, rule, Gradient(tofree));
 
           auto frees = Builder2.CreateCall(free->getFunctionType(), free, args);

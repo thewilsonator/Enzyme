@@ -4788,17 +4788,8 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
     assert(md2->getNumOperands() == 1);
     auto gvemd = cast<ConstantAsMetadata>(md2->getOperand(0));
     auto cs = cast<Constant>(gvemd->getValue());
-    
-    auto rule = [](Value *cs) { return cs; };
-    
-    auto dif = applyChainRule(arg->getType(), BuilderM, rule, Gradient(cast<Value>(cs)));
-
-    invertedPointers.insert(
-        std::make_pair((const Value *)oval, InvertedPointerVH(this, dif)));
-    
-    return dif;
-    
-    if (width > 1) {
+  
+    if (width > 1 && memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode) {
       SmallVector<Constant *, 2> Vals;
       for (unsigned i = 0; i < width; ++i) {
 

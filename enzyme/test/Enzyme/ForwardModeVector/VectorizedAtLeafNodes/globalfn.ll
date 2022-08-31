@@ -74,77 +74,50 @@ attributes #4 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disa
 !7 = !{!"any pointer", !4, i64 0}
 
 
-; CHECK: define {{[^@]+}}@fwddiffe3mulglobal(double [[X:%.*]], [3 x double] %"x'", i64 [[IDX:%.*]]) 
+; CHECK: define internal <3 x double> @fwddiffe3mulglobal(double %x, <3 x double> %"x'", i64 %idx)
 ; CHECK-NEXT:  entry:
-; CHECK-NEXT:    %"alloc'ipa" = alloca double
-; CHECK-NEXT:    [[TMP0:%.*]] = insertvalue [3 x double*] undef, double* %"alloc'ipa", 0
-; CHECK-NEXT:    %"alloc'ipa1" = alloca double
-; CHECK-NEXT:    [[TMP1:%.*]] = insertvalue [3 x double*] [[TMP0]], double* %"alloc'ipa1", 1
-; CHECK-NEXT:    %"alloc'ipa2" = alloca double
-; CHECK-NEXT:    [[TMP2:%.*]] = insertvalue [3 x double*] [[TMP1]], double* %"alloc'ipa2", 2
-; CHECK-NEXT:    store double 0.000000e+00, double* %"alloc'ipa"
-; CHECK-NEXT:    store double 0.000000e+00, double* %"alloc'ipa1"
-; CHECK-NEXT:    store double 0.000000e+00, double* %"alloc'ipa2"
-; CHECK-NEXT:    [[ALLOC:%.*]] = alloca double
-; CHECK-NEXT:    store double [[X]], double* [[ALLOC]]
-; CHECK-NEXT:    [[TMP3:%.*]] = extractvalue [3 x double] %"x'", 0
-; CHECK-NEXT:    store double [[TMP3]], double* %"alloc'ipa"
-; CHECK-NEXT:    [[TMP4:%.*]] = extractvalue [3 x double] %"x'", 1
-; CHECK-NEXT:    store double [[TMP4]], double* %"alloc'ipa1"
-; CHECK-NEXT:    [[TMP5:%.*]] = extractvalue [3 x double] %"x'", 2
-; CHECK-NEXT:    store double [[TMP5]], double* %"alloc'ipa2"
-; CHECK-NEXT:    %"arrayidx'ipg" = getelementptr inbounds [1 x void (double*)*], [1 x void (double*)*]* @global_shadow, i64 0, i64 [[IDX]]
-; CHECK-NEXT:    %arrayidx = getelementptr inbounds [1 x void (double*)*], [1 x void (double*)*]* @global, i64 0, i64 %idx
-; CHECK-NEXT:    %"fp'ipl" = load void (double*)*, void (double*)** %"arrayidx'ipg"
-; CHECK-NEXT:   %fp = load void (double*)*, void (double*)** %arrayidx
-; CHECK-NEXT:   %6 = bitcast void (double*)* %fp to i8*
-; CHECK-NEXT:   %7 = bitcast void (double*)* %"fp'ipl" to i8*
-; CHECK-NEXT:   %8 = icmp eq i8* %6, %7
-; CHECK-NEXT:   br i1 %8, label %error.i, label %__enzyme_runtimeinactiveerr.exit
+; CHECK-NEXT:   %"alloc'ipa" = alloca <3 x double>, align 8
+; CHECK-NEXT:   store <3 x double> zeroinitializer, <3 x double>* %"alloc'ipa", align 8
+; CHECK-NEXT:   %alloc = alloca double, align 8
+; CHECK-NEXT:   store double %x, double* %alloc, align 8
+; CHECK-NEXT:   store <3 x double> %"x'", <3 x double>* %"alloc'ipa", align 8
+; CHECK-NEXT:   %"arrayidx'ipg" = getelementptr inbounds [1 x <3 x void (double*)*>], [1 x <3 x void (double*)*>]* @global_shadow, i64 0, i64 %idx
+; CHECK-NEXT:   %arrayidx = getelementptr inbounds [1 x void (double*)*], [1 x void (double*)*]* @global, i64 0, i64 %idx
+; CHECK-NEXT:   %"fp'ipl" = load <3 x void (double*)*>, <3 x void (double*)*>* %"arrayidx'ipg", align 8
+; CHECK-NEXT:   %fp = load void (double*)*, void (double*)** %arrayidx, align 8
+; CHECK-NEXT:   %0 = extractelement <3 x void (double*)*> %"fp'ipl", i32 0
+; CHECK-NEXT:   %1 = bitcast void (double*)* %fp to i8*
+; CHECK-NEXT:   %2 = bitcast void (double*)* %0 to i8*
+; CHECK-NEXT:   %3 = icmp eq i8* %1, %2
+; CHECK-NEXT:   br i1 %3, label %error.i, label %__enzyme_runtimeinactiveerr.exit
 
 ; CHECK: error.i:                                          ; preds = %entry
-; CHECK-NEXT:   %{{.*}} = call i32 @puts(i8* getelementptr inbounds ([79 x i8], [79 x i8]* @.str.3, i32 0, i32 0))
+; CHECK-NEXT:   %4 = call i32 @puts(i8* getelementptr inbounds ([79 x i8], [79 x i8]* @.str.2, i32 0, i32 0))
 ; CHECK-NEXT:   call void @exit(i32 1)
 ; CHECK-NEXT:   unreachable
 
 ; CHECK: __enzyme_runtimeinactiveerr.exit:                 ; preds = %entry
-; CHECK-NEXT:    [[TMP6:%.*]] = bitcast void (double*)* %"fp'ipl" to void (double*, [3 x double*])**
-; CHECK-NEXT:    [[TMP7:%.*]] = load void (double*, [3 x double*])*, void (double*, [3 x double*])** [[TMP6]]
-; CHECK-NEXT:    call void [[TMP7]](double* [[ALLOC]], [3 x double*] [[TMP2]])
-; CHECK-NEXT:    %"ret'ipl" = load double, double* %"alloc'ipa"
-; CHECK-NEXT:    [[TMP8:%.*]] = insertvalue [3 x double] undef, double %"ret'ipl", 0
-; CHECK-NEXT:    %"ret'ipl7" = load double, double* %"alloc'ipa1"
-; CHECK-NEXT:    [[TMP9:%.*]] = insertvalue [3 x double] [[TMP8]], double %"ret'ipl7", 1
-; CHECK-NEXT:    %"ret'ipl8" = load double, double* %"alloc'ipa2"
-; CHECK-NEXT:    [[TMP10:%.*]] = insertvalue [3 x double] [[TMP9]], double %"ret'ipl8", 2
-; CHECK-NEXT:    ret [3 x double] [[TMP10]]
-;
-;
-; CHECK: define {{[^@]+}}@fwddiffe3ipmul(double* [[X:%.*]], [3 x double*] %"x'")
+; CHECK-NEXT:   %5 = bitcast void (double*)* %0 to void (double*, <3 x double>*)**
+; CHECK-NEXT:   %6 = load void (double*, <3 x double>*)*, void (double*, <3 x double>*)** %5, align 8
+; CHECK-NEXT:   call void %6(double* %alloc, <3 x double>* %"alloc'ipa")
+; CHECK-NEXT:   %"ret'ipl" = load <3 x double>, <3 x double>* %"alloc'ipa", align 8, !tbaa !3
+; CHECK-NEXT:   ret <3 x double> %"ret'ipl"
+; CHECK-NEXT: }
+
+
+; CHECK: define internal void @fwddiffe3ipmul(double* %x, <3 x double>* %"x'")
 ; CHECK-NEXT:  entry:
-; CHECK-NEXT:    [[TMP0:%.*]] = extractvalue [3 x double*] %"x'", 0
-; CHECK-NEXT:    %"'ipl" = load double, double* [[TMP0]]
-; CHECK-NEXT:    [[TMP1:%.*]] = extractvalue [3 x double*] %"x'", 1
-; CHECK-NEXT:    %"'ipl1" = load double, double* [[TMP1]]
-; CHECK-NEXT:    [[TMP2:%.*]] = extractvalue [3 x double*] %"x'", 2
-; CHECK-NEXT:    %"'ipl2" = load double, double* [[TMP2]]
-; CHECK-NEXT:    [[TMP3:%.*]] = load double, double* [[X]]
-; CHECK-NEXT:    [[MUL:%.*]] = fmul fast double [[TMP3]], [[TMP3]]
-; CHECK-NEXT:    [[TMP4:%.*]] = fmul fast double %"'ipl", [[TMP3]]
-; CHECK-NEXT:    [[TMP5:%.*]] = fmul fast double %"'ipl", [[TMP3]]
-; CHECK-NEXT:    [[TMP6:%.*]] = fadd fast double [[TMP4]], [[TMP5]]
-; CHECK-NEXT:    [[TMP7:%.*]] = fmul fast double %"'ipl1", [[TMP3]]
-; CHECK-NEXT:    [[TMP8:%.*]] = fmul fast double %"'ipl1", [[TMP3]]
-; CHECK-NEXT:    [[TMP9:%.*]] = fadd fast double [[TMP7]], [[TMP8]]
-; CHECK-NEXT:    [[TMP10:%.*]] = fmul fast double %"'ipl2", [[TMP3]]
-; CHECK-NEXT:    [[TMP11:%.*]] = fmul fast double %"'ipl2", [[TMP3]]
-; CHECK-NEXT:    [[TMP12:%.*]] = fadd fast double [[TMP10]], [[TMP11]]
-; CHECK-NEXT:    store double [[MUL]], double* [[X]]
-; CHECK-NEXT:    [[TMP13:%.*]] = extractvalue [3 x double*] %"x'", 0
-; CHECK-NEXT:    store double [[TMP6]], double* [[TMP13]]
-; CHECK-NEXT:    [[TMP14:%.*]] = extractvalue [3 x double*] %"x'", 1
-; CHECK-NEXT:    store double [[TMP9]], double* [[TMP14]]
-; CHECK-NEXT:    [[TMP15:%.*]] = extractvalue [3 x double*] %"x'", 2
-; CHECK-NEXT:    store double [[TMP12]], double* [[TMP15]]
-; CHECK-NEXT:    ret void
-;
+; CHECK-NEXT:   %"'ipl" = load <3 x double>, <3 x double>* %"x'", align 8, !tbaa !3
+; CHECK-NEXT:   %0 = load double, double* %x, align 8, !tbaa !3
+; CHECK-NEXT:   %mul = fmul fast double %0, %0
+; CHECK-NEXT:   %.splatinsert = insertelement <3 x double> poison, double %0, i32 0
+; CHECK-NEXT:   %.splat = shufflevector <3 x double> %.splatinsert, <3 x double> poison, <3 x i32> zeroinitializer
+; CHECK-NEXT:   %.splatinsert1 = insertelement <3 x double> poison, double %0, i32 0
+; CHECK-NEXT:   %.splat2 = shufflevector <3 x double> %.splatinsert1, <3 x double> poison, <3 x i32> zeroinitializer
+; CHECK-NEXT:   %1 = fmul fast <3 x double> %"'ipl", %.splat2
+; CHECK-NEXT:   %2 = fmul fast <3 x double> %"'ipl", %.splat
+; CHECK-NEXT:   %3 = fadd fast <3 x double> %1, %2
+; CHECK-NEXT:   store double %mul, double* %x, align 8
+; CHECK-NEXT:   store <3 x double> %3, <3 x double>* %"x'", align 8
+; CHECK-NEXT:   ret void
+; CHECK-NEXT: }

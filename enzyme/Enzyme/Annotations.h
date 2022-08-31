@@ -275,6 +275,15 @@ public:
         if (auto vty = dyn_cast<VectorType>(value->getType())) {
           unsigned vector_width = vty->getElementCount().getKnownMinValue();
           return Builder.CreateShuffleVector(value, GradientUtils::CreateVectorSplatMask(vector_width, width), value->getName() + ".vecsplat");
+        } else if (auto sty = dyn_cast<StructType>(value->getType())) {
+          auto vsty = GradientUtils::getShadowType(sty, width, memoryLayout);
+          Value *vecstruct = UndefValue::get(vsty);
+          for (unsigned i = 0; i < sty->getNumElements(); ++i) {
+            auto elem = Builder.CreateExtractValue(value, {i});
+            auto splat = Builder.CreateVectorSplat(width, elem);
+            vecstruct = Builder.CreateInsertValue(vecstruct, splat, {i});
+          }
+          return vecstruct;
         }
         return Builder.CreateVectorSplat(width, value);
     }
