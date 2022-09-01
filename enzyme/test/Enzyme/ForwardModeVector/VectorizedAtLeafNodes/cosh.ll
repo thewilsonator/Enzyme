@@ -20,14 +20,14 @@ entry:
 declare double @cosh(double)
 
 
-; CHECK: define internal [2 x double] @fwddiffe2tester(double %x, [2 x double] %"x'")
+; CHECK: define internal <2 x double> @fwddiffe2tester(double %x, <2 x double> %"x'")
 ; CHECK-NEXT: entry:
-; CHECK-NEXT:   %0 = call fast double @sinh(double %x)
-; CHECK-NEXT:   %1 = extractvalue [2 x double] %"x'", 0
+; CHECK-NEXT:   %0 = call fast double @sinh(double %x) #1
+; CHECK-NEXT:   %1 = extractelement <2 x double> %"x'", i32 0
 ; CHECK-NEXT:   %2 = fmul fast double %1, %0
-; CHECK-NEXT:   %3 = insertvalue [2 x double] undef, double %2, 0
-; CHECK-NEXT:   %4 = extractvalue [2 x double] %"x'", 1
+; CHECK-NEXT:   %3 = insertelement <2 x double> undef, double %2, i32 0
+; CHECK-NEXT:   %4 = extractelement <2 x double> %"x'", i32 1
 ; CHECK-NEXT:   %5 = fmul fast double %4, %0
-; CHECK-NEXT:   %6 = insertvalue [2 x double] %3, double %5, 1
-; CHECK-NEXT:   ret [2 x double] %6
+; CHECK-NEXT:   %6 = insertelement <2 x double> %3, double %5, i32 1
+; CHECK-NEXT:   ret <2 x double> %6
 ; CHECK-NEXT: }

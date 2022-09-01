@@ -23,8 +23,14 @@ declare double @log1p(double)
 ; CHECK: define internal <3 x double> @fwddiffe3tester(double %x, <3 x double> %"x'")
 ; CHECK-NEXT: entry:
 ; CHECK-NEXT:   %0 = fadd fast double %x, 1.000000e+00
-; CHECK-NEXT:   %.splatinsert = insertelement <3 x double> poison, double %0, i32 0
-; CHECK-NEXT:   %.splat = shufflevector <3 x double> %.splatinsert, <3 x double> poison, <3 x i32> zeroinitializer
-; CHECK-NEXT:   %1 = fdiv fast <3 x double> %"x'", %.splat
-; CHECK-NEXT:   ret <3 x double> %1
+; CHECK-NEXT:   %1 = extractelement <3 x double> %"x'", i32 0
+; CHECK-NEXT:   %2 = fdiv fast double %1, %0
+; CHECK-NEXT:   %3 = insertelement <3 x double> undef, double %2, i32 0
+; CHECK-NEXT:   %4 = extractelement <3 x double> %"x'", i32 1
+; CHECK-NEXT:   %5 = fdiv fast double %4, %0
+; CHECK-NEXT:   %6 = insertelement <3 x double> %3, double %5, i32 1
+; CHECK-NEXT:   %7 = extractelement <3 x double> %"x'", i32 2
+; CHECK-NEXT:   %8 = fdiv fast double %7, %0
+; CHECK-NEXT:   %9 = insertelement <3 x double> %6, double %8, i32 2
+; CHECK-NEXT:   ret <3 x double> %9
 ; CHECK-NEXT: }
