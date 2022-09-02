@@ -1080,35 +1080,35 @@ public:
     return result;
   }
 
-  Value *vectorizeAtLeafNodes(ArrayRef<Value *> toVectorize, unsigned width,
-                              IRBuilder<> &Builder) {
-    Type *ScalarTy = toVectorize[0]->getType();
-    Type *VectorTy = getTypeVectorizedAtLeafNodes(ScalarTy, width);
-    Type *ITy = Type::getInt8Ty(Builder.getContext());
-    Constant *AllocSize = ConstantExpr::getSizeOf(VectorTy);
-    AllocSize = ConstantExpr::getTruncOrBitCast(AllocSize, ITy);
-    Instruction *insertPoint = &*Builder.GetInsertPoint();
-
-    Instruction *Malloc = CallInst::CreateMalloc(
-        insertPoint, ITy, VectorTy, AllocSize, nullptr, nullptr,
-        "vectorizeAtLeafNodes." + toVectorize[0]->getName());
-
-    std::vector<std::tuple<Type *, std::vector<Value *>>> idxs =
-        getLeafNodeIndices(ScalarTy, {});
-
-    for (auto &[ty, idx] : idxs) {
-      auto ptr = Builder.CreateGEP(Malloc, idx);
-      auto arr = UndefValue::get(ArrayType::get(ty, width));
-      for (unsigned i = 0; i < width; ++i) {
-        Value *val =
-            Builder.CreateLoad(ty, Builder.CreateGEP(toVectorize[i], idx));
-        Builder.CreateInsertValue(arr, val, {i});
-      }
-      Builder.CreateStore(arr, ptr);
-    };
-
-    return Malloc;
-  }
+//  Value *vectorizeAtLeafNodes(ArrayRef<Value *> toVectorize, unsigned width,
+//                              IRBuilder<> &Builder) {
+//    Type *ScalarTy = toVectorize[0]->getType();
+//    Type *VectorTy = getTypeVectorizedAtLeafNodes(ScalarTy, width);
+//    Type *ITy = Type::getInt8Ty(Builder.getContext());
+//    Constant *AllocSize = ConstantExpr::getSizeOf(VectorTy);
+//    AllocSize = ConstantExpr::getTruncOrBitCast(AllocSize, ITy);
+//    Instruction *insertPoint = &*Builder.GetInsertPoint();
+//
+//    Instruction *Malloc = CallInst::CreateMalloc(
+//        insertPoint, ITy, VectorTy, AllocSize, nullptr, nullptr,
+//        "vectorizeAtLeafNodes." + toVectorize[0]->getName());
+//
+//    std::vector<std::tuple<Type *, std::vector<Value *>>> idxs =
+//        getLeafNodeIndices(ScalarTy, {});
+//
+//    for (auto &[ty, idx] : idxs) {
+//      auto ptr = Builder.CreateGEP(ty, Malloc, idx);
+//      auto arr = UndefValue::get(ArrayType::get(ty, width));
+//      for (unsigned i = 0; i < width; ++i) {
+//        Value *val =
+//            Builder.CreateLoad(ty, Builder.CreateGEP(toVectorize[i], idx));
+//        Builder.CreateInsertValue(arr, val, {i});
+//      }
+//      Builder.CreateStore(arr, ptr);
+//    };
+//
+//    return Malloc;
+//  }
 
   /// Return whether successful
   bool HandleAutoDiff(CallInst *CI, TargetLibraryInfo &TLI, DerivativeMode mode,
