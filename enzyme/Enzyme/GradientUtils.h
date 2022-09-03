@@ -72,6 +72,19 @@
 #include "llvm/Support/ErrorHandling.h"
 
 using namespace llvm;
+  
+  template<typename... Args>
+  inline auto eval_tuple(llvm::IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned int i, Args... args);
+
+  template<>
+  inline auto eval_tuple(llvm::IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned int i) {
+      return std::tuple<>();
+  }
+  template<typename Arg0, typename... Args>
+  inline auto eval_tuple(llvm::IRBuilder<> &Builder, VectorModeMemoryLayout memoryLayout, unsigned width, unsigned int i, Arg0 arg0, Args... args) {
+      auto &&v = arg0.getValue(Builder, memoryLayout, width, i);
+      return std::tuple_cat(std::make_tuple(v), eval_tuple(Builder, memoryLayout, width, i, args...));
+  }
 
 #include "llvm-c/Core.h"
 
@@ -1906,7 +1919,7 @@ public:
       Type *wrappedType = ArrayType::get(diffType, width);
       Value *res = UndefValue::get(wrappedType);
       for (unsigned int i = 0; i < width; ++i) {
-        auto diff = rule(args.getValue(Builder, memoryLayout, width, i)...);
+        auto diff = std::apply(rule, std::move(eval_tuple(Builder, memoryLayout, width, i, args...)));
         res = Builder.CreateInsertValue(res, diff, {i});
       }
       return res;
@@ -1914,7 +1927,7 @@ public:
       if (diffType->isVectorTy()) {
         Value *res = nullptr;
         for (unsigned int i = 0; i < width; ++i) {
-          auto diff = rule(args.getValue(Builder, memoryLayout, width, i)...);
+          auto diff = std::apply(rule, std::move(eval_tuple(Builder, memoryLayout, width, i, args...)));
           if (res) {
             VectorType *rvty = cast<VectorType>(res->getType());
             VectorType *dvty = cast<VectorType>(diff->getType());
