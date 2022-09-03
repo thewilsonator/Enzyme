@@ -4336,22 +4336,21 @@ public:
 
         Value *cmp =
             Builder2.CreateFCmpOEQ(arg, Constant::getNullValue(tys[0]));
+          
+        CallInst *cal = cast<CallInst>(Builder2.CreateCall(FT, SqrtF, {arg}));
+        cal->setCallingConv(CI.getCallingConv());
+        cal->setDebugLoc(gutils->getNewFromOriginal(I.getDebugLoc()));
 
-        auto rule = [&](Value *op, Value *arg, Constant *half, Value *cmp,
-                        Type *opType) {
-          CallInst *cal = cast<CallInst>(Builder2.CreateCall(FT, SqrtF, {arg}));
-          cal->setCallingConv(CI.getCallingConv());
-          cal->setDebugLoc(gutils->getNewFromOriginal(I.getDebugLoc()));
+        auto rule = [&](Value *op) {
 
           Value *dif0 = Builder2.CreateFDiv(Builder2.CreateFMul(half, op), cal);
 
-          return Builder2.CreateSelect(cmp, Constant::getNullValue(opType),
+          return Builder2.CreateSelect(cmp, Constant::getNullValue(dif0->getType()),
                                        dif0);
         };
 
         Value *dif0 = applyChainRule</*forceScalar*/ true>(
-            I.getType(), Builder2, rule, Gradient(op), Primal(arg),
-            Primal(half), Primal(cmp), Primal(opType));
+            I.getType(), Builder2, rule, Gradient(op));
         setDiffe(&I, dif0, Builder2);
         return;
       }
@@ -4406,11 +4405,11 @@ public:
                             ? Constant::getNullValue(opType1)
                             : diffe(orig_ops[1], Builder2);
 
-        auto rule = [&Builder2](Value *cmp, Value *diffe0, Value *diffe1) {
+        auto rule = [&Builder2, &cmp](Value *diffe0, Value *diffe1) {
           return Builder2.CreateSelect(cmp, diffe0, diffe1);
         };
 
-        Value *dif = applyChainRule(I.getType(), Builder2, rule, Primal(cmp),
+        Value *dif = applyChainRule(I.getType(), Builder2, rule,
                                     Gradient(diffe0), Gradient(diffe1));
         setDiffe(&I, dif, Builder2);
         return;
@@ -4440,11 +4439,11 @@ public:
                             ? Constant::getNullValue(opType1)
                             : diffe(orig_ops[1], Builder2);
 
-        auto rule = [&Builder2](Value *cmp, Value *diffe0, Value *diffe1) {
+        auto rule = [&Builder2, &cmp](Value *diffe0, Value *diffe1) {
           return Builder2.CreateSelect(cmp, diffe0, diffe1);
         };
 
-        Value *dif = applyChainRule(I.getType(), Builder2, rule, Primal(cmp),
+        Value *dif = applyChainRule(I.getType(), Builder2, rule,
                                     Gradient(diffe0), Gradient(diffe1));
         setDiffe(&I, dif, Builder2);
 
@@ -4648,8 +4647,7 @@ public:
 
           Value *cmp = Builder2.CreateICmpEQ(
               ConstantInt::get(args[1]->getType(), 0), op1);
-          auto rule = [&Builder2](Value *op, Value *cal, Value *cast,
-                                  Value *cmp) {
+          auto rule = [&Builder2, &cmp](Value *op, Value *cal, Value *cast) {
             return Builder2.CreateSelect(
                 cmp, Constant::getNullValue(op->getType()),
                 Builder2.CreateFMul(Builder2.CreateFMul(op, cal), cast));
@@ -4657,7 +4655,7 @@ public:
 
           Value *dif0 =
               applyChainRule(I.getType(), Builder2, rule, Gradient(op),
-                             Primal(cal), Primal(cast), Primal(cmp));
+                             Primal(cal), Primal(cast));
           setDiffe(&I, dif0, Builder2);
         }
         return;

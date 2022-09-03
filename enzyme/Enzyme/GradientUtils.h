@@ -1879,14 +1879,36 @@ public:
 
   static inline Value *extractMeta(IRBuilder<> &Builder, Value *Agg,
                                    unsigned off) {
-    while (auto Ins = dyn_cast<InsertValueInst>(Agg)) {
-      if (Ins->getNumIndices() != 1)
-        break;
-      if (Ins->getIndices()[0] == off)
-        return Ins->getInsertedValueOperand();
-      else
-        Agg = Ins->getAggregateOperand();
+    while (true) {
+      if (auto Ins = dyn_cast<InsertValueInst>(Agg)) {
+          if (Ins->getNumIndices() != 1)
+            break;
+          if (Ins->getIndices()[0] == off)
+            return Ins->getInsertedValueOperand();
+          else
+            Agg = Ins->getAggregateOperand();
+          continue;
+      }
+      if (auto Ins = dyn_cast<InsertElementInst>(Agg)) {
+          if (Ins->getNumOperands() != 3)
+            break;
+          size_t cur;
+          if (auto CI = dyn_cast<ConstantInt>(Ins->getOperand(2)))
+              cur = CI->getValue().getZExtValue();
+          else
+              break;
+          if (cur == off)
+            return Ins->getOperand(1);
+          else
+            Agg = Ins->getOperand(0);
+          continue;
+      }
+      break;
     }
+
+    if (Agg->getType()->isVectorTy())
+      return Builder.CreateExtractElement(Agg, {off});
+
     return Builder.CreateExtractValue(Agg, {off});
   }
   

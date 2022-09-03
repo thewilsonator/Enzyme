@@ -5277,8 +5277,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
         invertedPointers.insert(
             std::make_pair((const Value *)oval, InvertedPointerVH(this, tmp)));
 
-        Type *wrappedType = ArrayType::get(phi->getType(), width);
-        Value *res = UndefValue::get(wrappedType);
+        Value *res = UndefValue::get(shadowTy);
 
         for (unsigned int i = 0; i < getWidth(); ++i) {
           PHINode *which =
@@ -5297,7 +5296,10 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
                 cast<BasicBlock>(getNewFromOriginal(phi->getIncomingBlock(j))));
           }
 
-          res = postPhi.CreateInsertValue(res, which, {i});
+          if (shadowTy->isVectorTy())
+            res = postPhi.CreateInsertElement(res, which, postPhi.getInt32(i));
+          else
+            res = postPhi.CreateInsertValue(res, which, {i});
         }
         invertedPointers.erase((const Value *)oval);
         replaceAWithB(tmp, res);
