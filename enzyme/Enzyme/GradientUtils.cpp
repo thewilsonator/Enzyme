@@ -4976,13 +4976,13 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
     auto ip0 = invertPointerM(op0, bb);
     auto ip1 = invertPointerM(op1, bb);
     
-    ArrayRef<int> mask = arg->getShuffleMask();
 
-    auto rule = [&bb, &arg](Value *ip0, Value *ip1, ArrayRef<int> mask) {
+    auto rule = [&bb, &arg](Value *ip0, Value *ip1) {
+      ArrayRef<int> mask = arg->getShuffleMask();
       return bb.CreateShuffleVector(ip0, ip1, mask, arg->getName() + "'ipsv");
     };
 
-    Value *shadow = applyChainRule(arg->getType(), bb, rule, Gradient(ip0), Gradient(ip1), ShuffleMask(mask));
+    Value *shadow = applyChainRule(arg->getType(), bb, rule, Gradient(ip0), Gradient(ip1));
 
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, shadow)));
