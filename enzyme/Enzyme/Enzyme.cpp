@@ -1456,6 +1456,10 @@ public:
 #endif
               element = Builder.CreateBitCast(element, elementPtrTy);
             } else {
+              EmitFailure(
+                  "NonPointerBatch", CI->getDebugLoc(), CI,
+                  "Batched argument at index ", i,
+                  " must be of pointer type, found: ", *element->getType());
               return false;
             }
           }
@@ -1494,7 +1498,7 @@ public:
           "EnzymeInsufficientArgs", CI->getDebugLoc(), CI,
           "Insufficient number of args passed to derivative call required ",
           numParams, " primal args, found ", truei);
-      return true;
+      return false;
     }
 
     std::map<Argument *, bool> volatile_args;
@@ -1660,8 +1664,13 @@ public:
     }
     }
 
-    if (!newFunc)
+    if (!newFunc) {
+      StringRef n = fn->getName();
+      EmitFailure("FailedToDifferentiate", fn->getSubprogram(),
+                  &*fn->getEntryBlock().begin(),
+                  "Could not generate derivative function of ", n);
       return false;
+    }
 
     if (differentialReturn) {
       if (differet)
@@ -1716,7 +1725,6 @@ public:
       assert(tape->getType() == tapeType);
       args.push_back(tape);
     }
-    assert(newFunc);
 
     if (EnzymePrint) {
       llvm::errs() << "postfn:\n" << *newFunc << "\n";
@@ -2482,14 +2490,6 @@ public:
 
       bool successful = true;
       changed |= lowerEnzymeCalls(F, successful, done);
-
-      if (!successful) {
-        StringRef n = F.getName();
-        EmitFailure("FailedToDifferentiate", F.getSubprogram(),
-                    &*F.getEntryBlock().begin(),
-                    "EnzymeFailure when replacing __enzyme_autodiff calls in ",
-                    n);
-      }
     }
 
     SmallVector<CallInst *, 4> toErase;
