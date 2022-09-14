@@ -154,8 +154,7 @@ struct CacheAnalysis {
       assert(found != uncacheable_args.end());
       if (found->second) {
         mustcache = true;
-        // EmitWarning("UncacheableOrigin", arg->getDebugLoc(), oldFunc,
-        // arg->getParent()->getEntryBlock(),
+        // EmitWarning("UncacheableOrigin", *arg,
         //            "origin arg may need caching ", *arg);
       }
     } else if (auto pn = dyn_cast<PHINode>(obj)) {
@@ -163,22 +162,22 @@ struct CacheAnalysis {
       for (auto &val : pn->incoming_values()) {
         if (is_value_mustcache_from_origin(val)) {
           mustcache = true;
-          EmitWarning("UncacheableOrigin", pn->getDebugLoc(), oldFunc,
-                      pn->getParent(), "origin pn may need caching ", *pn);
+          EmitWarning("UncacheableOrigin", *pn, "origin pn may need caching ",
+                      *pn);
           break;
         }
       }
     } else if (auto ci = dyn_cast<CastInst>(obj)) {
       mustcache = is_value_mustcache_from_origin(ci->getOperand(0));
       if (mustcache) {
-        EmitWarning("UncacheableOrigin", ci->getDebugLoc(), oldFunc,
-                    ci->getParent(), "origin ci may need caching ", *ci);
+        EmitWarning("UncacheableOrigin", *ci, "origin ci may need caching ",
+                    *ci);
       }
     } else if (auto gep = dyn_cast<GetElementPtrInst>(obj)) {
       mustcache = is_value_mustcache_from_origin(gep->getPointerOperand());
       if (mustcache) {
-        EmitWarning("UncacheableOrigin", gep->getDebugLoc(), oldFunc,
-                    gep->getParent(), "origin gep may need caching ", *gep);
+        EmitWarning("UncacheableOrigin", *gep, "origin gep may need caching ",
+                    *gep);
       }
     } else {
 
@@ -196,9 +195,8 @@ struct CacheAnalysis {
         } else {
           // OP is a non malloc/free call so we need to cache
           mustcache = true;
-          EmitWarning("UncacheableOrigin", obj_op->getDebugLoc(), oldFunc,
-                      obj_op->getParent(), "origin call may need caching ",
-                      *obj_op);
+          EmitWarning("UncacheableOrigin", *obj_op,
+                      "origin call may need caching ", *obj_op);
         }
       } else if (isa<AllocaInst>(obj)) {
         // No change to modref if alloca since the memory only exists in
@@ -213,10 +211,8 @@ struct CacheAnalysis {
         // In absence of more information, assume that the underlying object for
         // pointer operand is uncacheable in caller.
         mustcache = true;
-        if (isa<Instruction>(obj))
-          EmitWarning("UncacheableOrigin",
-                      cast<Instruction>(obj)->getDebugLoc(), oldFunc,
-                      cast<Instruction>(obj)->getParent(),
+        if (auto I = dyn_cast<Instruction>(obj))
+          EmitWarning("UncacheableOrigin", *I,
                       "unknown origin may need caching ", *obj);
       }
     }
@@ -328,16 +324,14 @@ struct CacheAnalysis {
                   }
 
                   can_modref = true;
-                  EmitWarning("Uncacheable", li.getDebugLoc(), oldFunc,
-                              li.getParent(), "Load may need caching ", li,
+                  EmitWarning("Uncacheable", li, "Load may need caching ", li,
                               " due to ", *mid, " via ", *II);
                   return true;
                 },
                 [&]() {
                   // if gone past entry
                   if (mode != DerivativeMode::ReverseModeCombined) {
-                    EmitWarning("Uncacheable", li.getDebugLoc(), oldFunc,
-                                li.getParent(), "Load may need caching ", li,
+                    EmitWarning("Uncacheable", li, "Load may need caching ", li,
                                 " due to entry via ", *II);
                     can_modref = true;
                   }
@@ -349,15 +343,15 @@ struct CacheAnalysis {
           }
         }
         can_modref = true;
-        EmitWarning("Uncacheable", li.getDebugLoc(), oldFunc, li.getParent(),
-                    "Load may need caching ", li, " due to ", *inst2);
+        EmitWarning("Uncacheable", li, "Load may need caching ", li, " due to ",
+                    *inst2);
         // Early exit
         return true;
       });
     } else {
 
-      EmitWarning("Uncacheable", li.getDebugLoc(), oldFunc, li.getParent(),
-                  "Load may need caching ", li, " due to origin ", *obj);
+      EmitWarning("Uncacheable", li, "Load may need caching ", li,
+                  " due to origin ", *obj);
     }
 
     return can_modref;
@@ -463,10 +457,10 @@ struct CacheAnalysis {
       }
       if (!init_safe && !isa<UndefValue>(obj) && !isa<ConstantInt>(obj) &&
           !isa<Function>(obj)) {
-        EmitWarning("UncacheableOrigin", callsite_op->getDebugLoc(), oldFunc,
-                    callsite_op->getParent(), "Callsite ", *callsite_op,
-                    " arg ", i, " ", *callsite_op->getArgOperand(i),
-                    " uncacheable from origin ", *obj);
+        EmitWarning("UncacheableOrigin", *callsite_op, "Callsite ",
+                    *callsite_op, " arg ", i, " ",
+                    *callsite_op->getArgOperand(i), " uncacheable from origin ",
+                    *obj);
       }
       args_safe.push_back(init_safe);
     }
@@ -523,10 +517,10 @@ struct CacheAnalysis {
                 inst2, MemoryLocation::getForArgument(callsite_op, i, TLI)))) {
           if (!isa<ConstantInt>(callsite_op->getArgOperand(i)) &&
               !isa<UndefValue>(callsite_op->getArgOperand(i)))
-            EmitWarning("UncacheableArg", callsite_op->getDebugLoc(), oldFunc,
-                        callsite_op->getParent(), "Callsite ", *callsite_op,
-                        " arg ", i, " ", *callsite_op->getArgOperand(i),
-                        " uncacheable due to ", *inst2);
+            EmitWarning("UncacheableArg", *callsite_op, "Callsite ",
+                        *callsite_op, " arg ", i, " ",
+                        *callsite_op->getArgOperand(i), " uncacheable due to ",
+                        *inst2);
           args_safe[i] = false;
         }
       }
@@ -1749,7 +1743,7 @@ const AugmentedReturn &EnzymeLogic::CreateAugmentedPrimal(
     }
 
     if (hasconstant) {
-      EmitWarning("NoCustom", todiff,
+      EmitWarning("NoCustom", *todiff,
                   "Massaging provided custom augmented forward pass to handle "
                   "constant argumented");
       SmallVector<Type *, 3> dupargs;
@@ -3384,7 +3378,7 @@ Function *EnzymeLogic::CreatePrimalAndGradient(
     auto foundcalled = cast<Function>(gvemd->getValue());
 
     if (hasconstant) {
-      EmitWarning("NoCustom", key.todiff,
+      EmitWarning("NoCustom", *key.todiff,
                   "Massaging provided custom reverse pass");
       SmallVector<Type *, 3> dupargs;
       std::vector<DIFFE_TYPE> next_constant_args(key.constant_args);
@@ -3609,8 +3603,7 @@ Function *EnzymeLogic::CreatePrimalAndGradient(
           ->second;
     }
 
-    EmitWarning("NoCustom", key.todiff->getEntryBlock().begin()->getDebugLoc(),
-                key.todiff, &key.todiff->getEntryBlock(),
+    EmitWarning("NoCustom", *key.todiff,
                 "Not using provided custom reverse pass as require either "
                 "return or non-constant");
   }
@@ -4237,8 +4230,7 @@ Function *EnzymeLogic::CreateForwardDiff(
       return ForwardCachedFunctions[tup] = NewF;
     }
 
-    EmitWarning("NoCustom", todiff->getEntryBlock().begin()->getDebugLoc(),
-                todiff, &todiff->getEntryBlock(),
+    EmitWarning("NoCustom", *todiff,
                 "Cannot use provided custom derivative pass");
   }
   if (todiff->empty() && CustomErrorHandler) {

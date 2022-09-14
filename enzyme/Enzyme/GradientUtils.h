@@ -659,9 +659,8 @@ public:
       } else if (auto store = dyn_cast<StoreInst>(cur)) {
         // TODO only add store to shadow iff non float type
         if (store->getValueOperand() == prev) {
-          EmitWarning("NotPromotable", cur->getDebugLoc(), oldFunc,
-                      cur->getParent(), " Could not promote allocation ", *V,
-                      " due to capturing store ", *cur);
+          EmitWarning("NotPromotable", *cur, " Could not promote allocation ",
+                      *V, " due to capturing store ", *cur);
           promotable = false;
           shadowpromotable = false;
           break;
@@ -695,9 +694,9 @@ public:
             if (arg == prev) {
               promotable = false;
               shadowpromotable = false;
-              EmitWarning("NotPromotable", cur->getDebugLoc(), oldFunc,
-                          cur->getParent(), " Could not promote allocation ",
-                          *V, " due to memset use ", *cur);
+              EmitWarning("NotPromotable", *cur,
+                          " Could not promote allocation ", *V,
+                          " due to memset use ", *cur);
               break;
             }
             break;
@@ -711,9 +710,8 @@ public:
         default:
           promotable = false;
           shadowpromotable = false;
-          EmitWarning("NotPromotable", cur->getDebugLoc(), oldFunc,
-                      cur->getParent(), " Could not promote allocation ", *V,
-                      " due to unknown intrinsic ", *cur);
+          EmitWarning("NotPromotable", *cur, " Could not promote allocation ",
+                      *V, " due to unknown intrinsic ", *cur);
           break;
         }
       } else if (auto CI = dyn_cast<CallInst>(cur)) {
@@ -784,15 +782,15 @@ public:
                 }
               } else {
                 promotable = false;
-                EmitWarning("NotPromotable", cur->getDebugLoc(), oldFunc,
-                            cur->getParent(), " Could not promote allocation ",
-                            *V, " due to unknown non-local call ", *cur);
+                EmitWarning("NotPromotable", *cur,
+                            " Could not promote allocation ", *V,
+                            " due to unknown non-local call ", *cur);
               }
             } else {
               promotable = false;
-              EmitWarning("NotPromotable", cur->getDebugLoc(), oldFunc,
-                          cur->getParent(), " Could not promote allocation ",
-                          *V, " due to unknown writing call ", *cur);
+              EmitWarning("NotPromotable", *cur,
+                          " Could not promote allocation ", *V,
+                          " due to unknown writing call ", *cur);
             }
 
             if (TT.isFloat()) {
@@ -836,9 +834,8 @@ public:
           } else {
             shadowpromotable = false;
             promotable = false;
-            EmitWarning("NotPromotable", cur->getDebugLoc(), oldFunc,
-                        cur->getParent(), " Could not promote allocation ", *V,
-                        " due to unknown capturing call ", *cur);
+            EmitWarning("NotPromotable", *cur, " Could not promote allocation ",
+                        *V, " due to unknown capturing call ", *cur);
           }
           idx++;
         }
@@ -846,8 +843,7 @@ public:
       } else {
         promotable = false;
         shadowpromotable = false;
-        EmitWarning("NotPromotable", cur->getDebugLoc(), oldFunc,
-                    cur->getParent(), " Could not promote allocation ", *V,
+        EmitWarning("NotPromotable", *cur, " Could not promote allocation ", *V,
                     " due to unknown instruction ", *cur);
       }
     }
@@ -884,9 +880,8 @@ public:
       for (auto res : results) {
         if (overwritesToMemoryReadBy(OrigAA, TLI, SE, OrigLI, OrigDT, LI, res,
                                      outer)) {
-          EmitWarning("NotPromotable", LI->getDebugLoc(), oldFunc,
-                      LI->getParent(), " Could not promote allocation ", *V,
-                      " due to load ", *LI,
+          EmitWarning("NotPromotable", *LI, " Could not promote allocation ",
+                      *V, " due to load ", *LI,
                       " which does not postdominates store ", *res);
           return;
         }
@@ -901,8 +896,7 @@ public:
       for (auto res : results) {
         if (overwritesToMemoryReadBy(OrigAA, TLI, SE, OrigLI, OrigDT,
                                      LI.loadCall, res, outer)) {
-          EmitWarning("NotPromotable", LI.loadCall->getDebugLoc(), oldFunc,
-                      LI.loadCall->getParent(),
+          EmitWarning("NotPromotable", *LI.loadCall,
                       " Could not promote allocation ", *V,
                       " due to load-like call ", *LI.loadCall,
                       " which does not postdominates store ", *res);
