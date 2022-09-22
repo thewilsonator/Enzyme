@@ -174,6 +174,12 @@ EnzymeLogicRef CreateEnzymeLogic(uint8_t PostOpt) {
 
 void ClearEnzymeLogic(EnzymeLogicRef Ref) { eunwrap(Ref).clear(); }
 
+void EnzymeLogicErasePreprocessedFunctions(EnzymeLogicRef Ref) {
+  auto &Logic = eunwrap(Ref);
+  for (const auto &pair : Logic.PPC.cache)
+    pair.second->eraseFromParent();
+}
+
 void FreeEnzymeLogic(EnzymeLogicRef Ref) { delete (EnzymeLogic *)Ref; }
 
 EnzymeTypeAnalysisRef CreateTypeAnalysis(EnzymeLogicRef Log,
@@ -691,7 +697,9 @@ LLVMMetadataRef EnzymeMakeNonConstTBAA(LLVMMetadataRef MD) {
     return MD;
   if (!CAM->getValue()->isOneValue())
     return MD;
-  SmallVector<Metadata *, 4> MDs(M->operands());
+  SmallVector<Metadata *, 4> MDs;
+  for (auto &M : M->operands())
+    MDs.push_back(M);
   MDs[3] =
       ConstantAsMetadata::get(ConstantInt::get(CAM->getValue()->getType(), 0));
   return wrap(MDNode::get(M->getContext(), MDs));

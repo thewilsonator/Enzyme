@@ -43,6 +43,12 @@ get_filename_component(LLVM_ABSOLUTE_DIR
 
 set(LLVM_DIR "${LLVM_ABSOLUTE_DIR}" CACHE FILEPATH "b" FORCE)
 
+if (EXISTS "${LLVM_DIR}/lib/cmake/llvm/LLVMConfig.cmake")
+  set(LLVM_DIR "${LLVM_DIR}/lib/cmake/llvm")
+endif()
+
+message("LLVM ABS DIR " ${LLVM_DIR})
+
 message("CMAKE_PREFIX_PATH " ${CMAKE_PREFIX_PATH})
 
 find_package(LLVM REQUIRED CONFIG)
@@ -52,10 +58,14 @@ if (NOT DEFINED LLVM_EXTERNAL_LIT)
       message("found llvm match ${CMAKE_MATCH_1} dir ${LLVM_DIR}")
     if (EXISTS ${LLVM_DIR}/../../../bin/llvm-lit) 
       set(LLVM_EXTERNAL_LIT ${LLVM_DIR}/../../../bin/llvm-lit) 
+    else()
+      set(LLVM_EXTERNAL_LIT lit)
     endif()
   else()
     if (EXISTS ${LLVM_DIR}/bin/llvm-lit) 
       set(LLVM_EXTERNAL_LIT ${LLVM_DIR}/bin/llvm-lit) 
+    else()
+      set(LLVM_EXTERNAL_LIT lit)
     endif()
   endif()
 endif()

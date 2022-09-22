@@ -74,6 +74,7 @@ llvm::cl::opt<bool> EnzymeStrictAliasing(
 
 const std::map<std::string, llvm::Intrinsic::ID> LIBM_FUNCTIONS = {
     {"sinc", Intrinsic::not_intrinsic},
+    {"sincn", Intrinsic::not_intrinsic},
     {"cos", Intrinsic::cos},
     {"sin", Intrinsic::sin},
     {"tan", Intrinsic::not_intrinsic},
@@ -1687,16 +1688,19 @@ void TypeAnalyzer::visitTruncInst(TruncInst &I) {
   size_t inSize = (DL.getTypeSizeInBits(I.getOperand(0)->getType()) + 7) / 8;
   size_t outSize = (DL.getTypeSizeInBits(I.getType()) + 7) / 8;
   if (direction & DOWN)
-    updateAnalysis(&I,
-                   getAnalysis(I.getOperand(0))
-                       .ShiftIndices(DL, /*off*/ 0, inSize, /*addOffset*/ 0)
-                       .ShiftIndices(DL, /*off*/ 0, outSize, /*addOffset*/ 0),
-                   &I);
+    if (outSize != 1)
+      updateAnalysis(&I,
+                     getAnalysis(I.getOperand(0))
+                         .ShiftIndices(DL, /*off*/ 0, inSize, /*addOffset*/ 0)
+                         .ShiftIndices(DL, /*off*/ 0, outSize, /*addOffset*/ 0),
+                     &I);
+  // Don't propagate up a trunc float -> i8
   if (direction & UP)
-    updateAnalysis(
-        I.getOperand(0),
-        getAnalysis(&I).ShiftIndices(DL, /*off*/ 0, outSize, /*addOffset*/ 0),
-        &I);
+    if (outSize != 1 || inSize == 1)
+      updateAnalysis(
+          I.getOperand(0),
+          getAnalysis(&I).ShiftIndices(DL, /*off*/ 0, outSize, /*addOffset*/ 0),
+          &I);
 }
 
 void TypeAnalyzer::visitZExtInst(ZExtInst &I) {
@@ -2032,7 +2036,7 @@ void TypeAnalyzer::visitShuffleVectorInst(ShuffleVectorInst &I) {
       if (direction & DOWN) {
         result |= TypeTree(BaseType::Anything)
                       .Only(-1)
-                      .ShiftIndices(dl, 0, size, size * i);
+                      .ShiftIndices(dl, 0, size, newOff);
       }
     } else {
       if ((size_t)mask[i] < numFirst) {

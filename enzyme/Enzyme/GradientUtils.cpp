@@ -104,11 +104,20 @@ llvm::cl::opt<bool>
     EnzymeRematerialize("enzyme-rematerialize", cl::init(true), cl::Hidden,
                         cl::desc("Rematerialize allocations/shadows in the "
                                  "reverse rather than caching"));
+
+llvm::cl::opt<bool>
+    EnzymeVectorSplitPhi("enzyme-vector-split-phi", cl::init(true), cl::Hidden,
+                         cl::desc("Split phis according to vector size"));
 }
 
-unsigned int MD_ToCopy[5] = {LLVMContext::MD_dbg, LLVMContext::MD_tbaa,
-                             LLVMContext::MD_tbaa_struct, LLVMContext::MD_range,
-                             LLVMContext::MD_nonnull};
+SmallVector<unsigned int, 9> MD_ToCopy = {
+    LLVMContext::MD_dbg,
+    LLVMContext::MD_tbaa,
+    LLVMContext::MD_tbaa_struct,
+    LLVMContext::MD_range,
+    LLVMContext::MD_nonnull,
+    LLVMContext::MD_dereferenceable,
+    LLVMContext::MD_dereferenceable_or_null};
 
 Value *GradientUtils::unwrapM(Value *const val, IRBuilder<> &BuilderM,
                               const ValueToValueMapTy &available,
@@ -2007,9 +2016,23 @@ Value *GradientUtils::cacheForReverse(IRBuilder<> &BuilderQ, Value *malloc,
             if (auto li = dyn_cast<LoadInst>(u)) {
               IRBuilder<> lb(li);
               if (replace) {
-                auto replacewith =
+
+                Value *replacewith =
                     (idx < 0) ? tape
                               : lb.CreateExtractValue(tape, {(unsigned)idx});
+                if (!inLoop && omp) {
+                  Value *tid = ompThreadId();
+#if LLVM_VERSION_MAJOR > 7
+                  Value *tPtr = lb.CreateInBoundsGEP(
+                      replacewith->getType()->getPointerElementType(),
+                      replacewith, ArrayRef<Value *>(tid));
+#else
+                  Value *tPtr =
+                      lb.CreateInBoundsGEP(replacewith, ArrayRef<Value *>(tid));
+#endif
+                  replacewith = lb.CreateLoad(
+                      replacewith->getType()->getPointerElementType(), tPtr);
+                }
                 if (li->getType() != replacewith->getType()) {
                   llvm::errs() << " oldFunc: " << *oldFunc << "\n";
                   llvm::errs() << " newFunc: " << *newFunc << "\n";
@@ -2157,8 +2180,13 @@ Value *GradientUtils::cacheForReverse(IRBuilder<> &BuilderQ, Value *malloc,
       if (!ignoreType && replace)
         cast<Instruction>(malloc)->replaceAllUsesWith(ret);
       ret->takeName(malloc);
-      if (replace)
-        erase(cast<Instruction>(malloc));
+      if (replace) {
+        auto malloci = cast<Instruction>(malloc);
+        if (malloci == &*BuilderQ.GetInsertPoint()) {
+          BuilderQ.SetInsertPoint(malloci->getNextNode());
+        }
+        erase(malloci);
+      }
     }
     return ret;
   } else {
@@ -2613,8 +2641,9 @@ BasicBlock *GradientUtils::getReverseOrLatchMerge(BasicBlock *BB,
 #else
                     auto align = SI->getAlignment();
 #endif
-                    setPtrDiffe(orig_ptr, valueop, NB, align, SI->isVolatile(),
-                                SI->getOrdering(), SI->getSyncScopeID(),
+                    setPtrDiffe(SI, orig_ptr, valueop, NB, align,
+                                SI->isVolatile(), SI->getOrdering(),
+                                SI->getSyncScopeID(),
                                 /*mask*/ nullptr);
                   }
                   // TODO shadow memtransfer
@@ -3781,7 +3810,10 @@ Constant *GradientUtils::GetOrCreateShadowFunction(
   std::vector<DIFFE_TYPE> types;
   for (auto &a : fn->args()) {
     uncacheable_args[&a] = !a.getType()->isFPOrFPVectorTy();
-    type_args.Arguments.insert(std::pair<Argument *, TypeTree>(&a, {}));
+    TypeTree TT;
+    if (a.getType()->isFPOrFPVectorTy())
+      TT.insert({-1}, ConcreteType(a.getType()->getScalarType()));
+    type_args.Arguments.insert(std::pair<Argument *, TypeTree>(&a, TT));
     type_args.KnownValues.insert(
         std::pair<Argument *, std::set<int64_t>>(&a, {}));
     DIFFE_TYPE typ;
@@ -3803,10 +3835,25 @@ Constant *GradientUtils::GetOrCreateShadowFunction(
                                mode != DerivativeMode::ForwardMode
                            ? DIFFE_TYPE::OUT_DIFF
                            : DIFFE_TYPE::DUP_ARG;
+
   if (fn->getReturnType()->isVoidTy() || fn->getReturnType()->isEmptyTy() ||
       (fn->getReturnType()->isIntegerTy() &&
        cast<IntegerType>(fn->getReturnType())->getBitWidth() < 16))
     retType = DIFFE_TYPE::CONSTANT;
+
+  if (mode != DerivativeMode::ForwardMode && retType == DIFFE_TYPE::DUP_ARG) {
+    if (auto ST = dyn_cast<StructType>(fn->getReturnType())) {
+      size_t numflt = 0;
+
+      for (unsigned i = 0; i < ST->getNumElements(); ++i) {
+        auto midTy = ST->getElementType(i);
+        if (midTy->isFPOrFPVectorTy())
+          numflt++;
+      }
+      if (numflt == ST->getNumElements())
+        retType = DIFFE_TYPE::OUT_DIFF;
+    }
+  }
 
   switch (mode) {
   case DerivativeMode::ForwardMode: {
@@ -4597,13 +4644,17 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
       AllocaInst *antialloca = bb.CreateAlloca(
           inst->getAllocatedType(), inst->getType()->getPointerAddressSpace(),
           asize, inst->getName() + "'ipa");
+#if LLVM_VERSION_MAJOR >= 11
+      antialloca->setAlignment(inst->getAlign());
+#elif LLVM_VERSION_MAJOR == 10
       if (inst->getAlignment()) {
-#if LLVM_VERSION_MAJOR >= 10
         antialloca->setAlignment(Align(inst->getAlignment()));
-#else
-        antialloca->setAlignment(inst->getAlignment());
-#endif
       }
+#else
+      if (inst->getAlignment()) {
+        antialloca->setAlignment(inst->getAlignment());
+      }
+#endif
       return antialloca;
     };
 
@@ -4618,13 +4669,17 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
         auto rule = [&](Value *antialloca) {
           StoreInst *st = bb.CreateStore(
               Constant::getNullValue(inst->getAllocatedType()), antialloca);
+#if LLVM_VERSION_MAJOR >= 11
+          cast<StoreInst>(st)->setAlignment(inst->getAlign());
+#elif LLVM_VERSION_MAJOR == 10
           if (inst->getAlignment()) {
-#if LLVM_VERSION_MAJOR >= 10
             cast<StoreInst>(st)->setAlignment(Align(inst->getAlignment()));
-#else
-            cast<StoreInst>(st)->setAlignment(inst->getAlignment());
-#endif
           }
+#else
+          if (inst->getAlignment()) {
+            cast<StoreInst>(st)->setAlignment(inst->getAlignment());
+          }
+#endif
         };
 
         applyChainRule(bb, rule, antialloca);
@@ -4658,8 +4713,11 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
       Type *tys[] = {dst_arg->getType(), len_arg->getType()};
       auto memset = cast<CallInst>(bb.CreateCall(
           Intrinsic::getDeclaration(M, Intrinsic::memset, tys), args));
-#if LLVM_VERSION_MAJOR >= 10
-      if (inst->getAlignment()) {
+#if LLVM_VERSION_MAJOR >= 11
+      memset->addParamAttr(
+          0, Attribute::getWithAlignment(inst->getContext(), inst->getAlign()));
+#elif LLVM_VERSION_MAJOR == 10
+      if (inst->getAlignment() != 0) {
         memset->addParamAttr(
             0, Attribute::getWithAlignment(inst->getContext(),
                                            Align(inst->getAlignment())));
@@ -4763,22 +4821,63 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
         bb.SetInsertPoint(bb.GetInsertBlock(), bb.GetInsertBlock()->begin());
       }
 
-      Type *shadowTy = getShadowType(phi->getType());
-      PHINode *which = bb.CreatePHI(shadowTy, phi->getNumIncomingValues());
-      which->setDebugLoc(getNewFromOriginal(phi->getDebugLoc()));
+      if (EnzymeVectorSplitPhi && width > 1) {
+        IRBuilder<> postPhi(NewV->getParent()->getFirstNonPHI());
+        Type *shadowTy = getShadowType(phi->getType());
+        PHINode *tmp = bb.CreatePHI(shadowTy, phi->getNumIncomingValues());
 
-      invertedPointers.insert(
-          std::make_pair((const Value *)oval, InvertedPointerVH(this, which)));
+        invertedPointers.insert(
+            std::make_pair((const Value *)oval, InvertedPointerVH(this, tmp)));
 
-      for (unsigned int i = 0; i < phi->getNumIncomingValues(); ++i) {
-        IRBuilder<> pre(
-            cast<BasicBlock>(getNewFromOriginal(phi->getIncomingBlock(i)))
-                ->getTerminator());
-        Value *val = invertPointerM(phi->getIncomingValue(i), pre, nullShadow);
-        which->addIncoming(val, cast<BasicBlock>(getNewFromOriginal(
-                                    phi->getIncomingBlock(i))));
+        Type *wrappedType = ArrayType::get(phi->getType(), width);
+        Value *res = UndefValue::get(wrappedType);
+
+        for (unsigned int i = 0; i < getWidth(); ++i) {
+          PHINode *which =
+              bb.CreatePHI(phi->getType(), phi->getNumIncomingValues());
+          which->setDebugLoc(getNewFromOriginal(phi->getDebugLoc()));
+
+          for (unsigned int j = 0; j < phi->getNumIncomingValues(); ++j) {
+            IRBuilder<> pre(
+                cast<BasicBlock>(getNewFromOriginal(phi->getIncomingBlock(j)))
+                    ->getTerminator());
+            Value *val =
+                invertPointerM(phi->getIncomingValue(j), pre, nullShadow);
+            auto extracted_diff = extractMeta(pre, val, i);
+            which->addIncoming(
+                extracted_diff,
+                cast<BasicBlock>(getNewFromOriginal(phi->getIncomingBlock(j))));
+          }
+
+          res = postPhi.CreateInsertValue(res, which, {i});
+        }
+        invertedPointers.erase((const Value *)oval);
+        replaceAWithB(tmp, res);
+        erase(tmp);
+
+        invertedPointers.insert(
+            std::make_pair((const Value *)oval, InvertedPointerVH(this, res)));
+
+        return res;
+      } else {
+        Type *shadowTy = getShadowType(phi->getType());
+        PHINode *which = bb.CreatePHI(shadowTy, phi->getNumIncomingValues());
+        which->setDebugLoc(getNewFromOriginal(phi->getDebugLoc()));
+
+        invertedPointers.insert(std::make_pair((const Value *)oval,
+                                               InvertedPointerVH(this, which)));
+
+        for (unsigned int i = 0; i < phi->getNumIncomingValues(); ++i) {
+          IRBuilder<> pre(
+              cast<BasicBlock>(getNewFromOriginal(phi->getIncomingBlock(i)))
+                  ->getTerminator());
+          Value *val =
+              invertPointerM(phi->getIncomingValue(i), pre, nullShadow);
+          which->addIncoming(val, cast<BasicBlock>(getNewFromOriginal(
+                                      phi->getIncomingBlock(i))));
+        }
+        return which;
       }
-      return which;
     }
   }
 
@@ -5559,13 +5658,17 @@ Value *GradientUtils::lookupM(Value *val, IRBuilder<> &BuilderM,
                         /*extraSize*/ nullptr);
 
                     auto ld = v.CreateLoad(AT, AI);
+#if LLVM_VERSION_MAJOR >= 11
+                    ld->setAlignment(AI->getAlign());
+#elif LLVM_VERSION_MAJOR == 10
                     if (AI->getAlignment()) {
-#if LLVM_VERSION_MAJOR >= 10
                       ld->setAlignment(Align(AI->getAlignment()));
-#else
-                      ld->setAlignment(AI->getAlignment());
-#endif
                     }
+#else
+                    if (AI->getAlignment()) {
+                      ld->setAlignment(AI->getAlignment());
+                    }
+#endif
                     scopeInstructions[cache].push_back(ld);
                     auto st = v.CreateStore(ld, outer);
                     auto bsize = newFunc->getParent()
