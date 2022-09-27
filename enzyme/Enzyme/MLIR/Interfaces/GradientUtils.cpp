@@ -301,7 +301,7 @@ LogicalResult MGradientUtils::visitChild(Operation *op) {
       return iface.createForwardModeAdjoint(builder, this);
     }
   }
-  return failure();
+  return op->emitError() << "could not compute the adjoint for this operation";
 }
 
 //===----------------------------------------------------------------------===//
@@ -845,8 +845,8 @@ FunctionOpInterface mlir::enzyme::MEnzymeLogic::CreateForwardDiff(
     auto first = oBB.begin();
     auto last = oBB.empty() ? oBB.end() : std::prev(oBB.end());
     for (auto it = first; it != last; ++it) {
-      // TODO: propagate errors.
-      (void)gutils->visitChild(&*it);
+      if (failed(gutils->visitChild(&*it)))
+        return nullptr;
     }
 
     createTerminator(gutils, &oBB, retType, returnValue);
