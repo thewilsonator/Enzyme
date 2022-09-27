@@ -208,7 +208,7 @@ SmallVector<unsigned int, 9> MD_ToCopy = {
       idx++;
     };
 
-    applyChainRule(BuilderM, rule, Gradient(ptr), Gradient(newval), Primal(mask));
+    applyChainRule<ResultType::UNWRAPPED>(BuilderM, rule, Gradient(ptr), Gradient(newval), Primal(mask));
   }
 
 #if LLVM_VERSION_MAJOR >= 10
@@ -1380,7 +1380,7 @@ Value *GradientUtils::unwrapM(Value *const val, IRBuilder<> &BuilderM,
           return toreturn;
         };
 
-        Value *toreturn = applyChainRule<true>(
+        Value *toreturn = applyChainRule<ResultType::UNWRAPPED>(
             dli->getType(), BuilderM, rule, Gradient(pidx));
 
         // TODO adding to cache only legal if no alias of any future writes
@@ -3235,7 +3235,7 @@ BasicBlock *GradientUtils::getReverseOrLatchMerge(BasicBlock *BB,
                       return anti;
                     };
 
-                    anti = applyChainRule<true>(orig->getType(), NB, rule);
+                    anti = applyChainRule<ResultType::UNWRAPPED>(orig->getType(), NB, rule);
 
                     if (auto MD = hasMetadata(orig, "enzyme_fromstack")) {
                       auto rule = [&](Value *anti) {
@@ -3257,7 +3257,7 @@ BasicBlock *GradientUtils::getReverseOrLatchMerge(BasicBlock *BB,
                         return replacement;
                       };
 
-                      Value *replacement = applyChainRule<true>(
+                      Value *replacement = applyChainRule<ResultType::UNWRAPPED>(
                           Type::getInt8Ty(orig->getContext()), NB, rule, Gradient(anti));
 
                       replaceAWithB(cast<Instruction>(anti), replacement);
@@ -3265,7 +3265,7 @@ BasicBlock *GradientUtils::getReverseOrLatchMerge(BasicBlock *BB,
                       anti = replacement;
                     }
 
-                    applyChainRule<true>(
+                    applyChainRule<ResultType::UNWRAPPED>(
                         NB,
                         [&](Value *anti) {
                           zeroKnownAllocation(NB, anti, args, funcName, TLI);
@@ -4628,7 +4628,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
             ConstantInt *len_arg = ConstantInt::get(Type::getInt64Ty(arg->getContext()), M->getDataLayout().getTypeAllocSizeInBits(
                                      arg->getValueType()) / 8);
 
-            auto rule2 = [&bb, &arg, &M, &oval](Value *antialloca, Type *ty, ConstantInt *val_arg, ConstantInt *len_arg) {
+            auto rule2 = [&bb, &arg, &M, &oval, &ty](Value *antialloca, Constant *val_arg, Constant *len_arg) {
               auto dst_arg = bb.CreateBitCast(antialloca, ty);
               
               
@@ -4663,7 +4663,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
               return antialloca;
             };
             
-            antialloca = applyChainRule(arg->getType(), bb, rule2, Gradient(antialloca), Count(ty), Count(val_arg), Size(len_arg));
+            antialloca = applyChainRule<ResultType::UNWRAPPED>(arg->getType(), bb, rule2, Gradient(antialloca), Primal(val_arg), Primal(len_arg));
             
             assert(antialloca->getType() == getShadowType(arg->getType()));
 
@@ -4938,7 +4938,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
       ;
     };
 
-    Value *shadow = applyChainRule<true>(arg->getType(), bb, rule, Gradient(ip), Primal(index));
+    Value *shadow = applyChainRule<ResultType::UNWRAPPED>(arg->getType(), bb, rule, Gradient(ip), Primal(index));
 
     invertedPointers.insert(
         std::make_pair((const Value *)oval, InvertedPointerVH(this, shadow)));
@@ -5104,7 +5104,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
       return antialloca;
     };
 
-    Value *antialloca = applyChainRule(oval->getType(), bb, rule1, Primal(inst->getAllocatedType()), Count(asize));
+    Value *antialloca = applyChainRule<ResultType::UNWRAPPED>(oval->getType(), bb, rule1, Primal(inst->getAllocatedType()), Primal(asize));
 
     invertedPointers.insert(std::make_pair(
         (const Value *)oval, InvertedPointerVH(this, antialloca)));
@@ -5220,7 +5220,7 @@ Value *GradientUtils::invertPointerM(Value *const oval, IRBuilder<> &BuilderM,
       auto mask = getNewFromOriginal(II->getArgOperand(2));
       auto defaultV = invertPointerM(II->getArgOperand(3), bb, nullShadow);
       
-      return applyChainRule(II->getType(), bb, rule, Gradient(ptr), Count(align), BitMask(mask), Gradient(defaultV), Primal(II->getType()));
+      return applyChainRule<ResultType::UNWRAPPED>(II->getType(), bb, rule, Gradient(ptr), Primal(align), Primal(mask), Gradient(defaultV), Primal(II->getType()));
     }
     }
   } else if (auto phi = dyn_cast<PHINode>(oval)) {

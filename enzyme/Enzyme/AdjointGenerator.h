@@ -1050,7 +1050,7 @@ public:
             dif1->setSyncScopeID(I.getSyncScopeID());
             return dif1;
           };
-          Value *diff = applyChainRule(I.getType(), Builder2, rule, ip);
+          Value *diff = applyChainRule(I.getType(), Builder2, rule, Gradient(ip));
 
           addToDiffe(I.getValOperand(), diff, Builder2,
                      I.getValOperand()->getType()->getScalarType());
@@ -1979,19 +1979,19 @@ public:
 
   /// Unwraps a vector derivative from its internal representation and applies a
   /// function f to each element. Return values of f are collected and wrapped.
-  template <bool forceScalar = false, typename Func, typename... Args>
+  template <ResultType resTy = ResultType::WRAPPED, typename Func, typename... Args>
   Value *applyChainRule(Type *diffType, IRBuilder<> &Builder, Func rule,
                         Args... args) {
     return ((GradientUtils *)gutils)
-        ->applyChainRule<forceScalar>(diffType, Builder, rule, args...);
+        ->applyChainRule<resTy>(diffType, Builder, rule, args...);
   }
 
   /// Unwraps a vector derivative from its internal representation and applies a
   /// function f to each element.
-  template <bool forceScalar = false, typename Func, typename... Args>
+  template <ResultType resTy = ResultType::WRAPPED, typename Func, typename... Args>
   void applyChainRule(IRBuilder<> &Builder, Func rule, Args... args) {
     ((GradientUtils *)gutils)
-        ->applyChainRule<forceScalar>(Builder, rule, args...);
+        ->applyChainRule<resTy>(Builder, rule, args...);
   }
 
   bool shouldFree() {
@@ -2822,7 +2822,7 @@ public:
                 return V;
               };
 
-              auto diffe = applyChainRule<true>(BO.getType(), Builder2, rule,
+              auto diffe = applyChainRule<ResultType::UNWRAPPED>(BO.getType(), Builder2, rule,
                                                 Gradient(dif[1 - i]),
                                                 Primal(CV), Primal(eFT));
               setDiffe(&BO, diffe, Builder2);
@@ -3022,7 +3022,7 @@ public:
 
       auto dbg = gutils->getNewFromOriginal(MS.getDebugLoc());
 
-      applyChainRule(
+      applyChainRule<ResultType::UNWRAPPED>(
           BuilderZ,
           [&](Value *op0, Value *op1, Value *op2, Value *op3) {
             SmallVector<Value *, 4> args = {op0, op1, op2};
@@ -3035,7 +3035,7 @@ public:
             cal->setTailCallKind(MS.getTailCallKind());
             cal->setDebugLoc(dbg);
           },
-          Gradient(op0), Primal(op1), Primal(op2), Size(op3));
+          Gradient(op0), Primal(op1), Primal(op2), Primal(op3));
       return;
     }
 
@@ -3283,8 +3283,8 @@ public:
           cal->setDebugLoc(gutils->getNewFromOriginal(MS.getDebugLoc()));
         };
 
-        applyChainRule(BuilderZ, rule, Gradient(shadow_dst), Primal(op1),
-                       Size(length));
+        applyChainRule<ResultType::UNWRAPPED>(BuilderZ, rule, Gradient(shadow_dst), Primal(op1),
+                       Primal(length));
       }
       if (secretty && (Mode == DerivativeMode::ReverseModeGradient ||
                        Mode == DerivativeMode::ReverseModeCombined)) {
@@ -3321,9 +3321,9 @@ public:
           cal->setDebugLoc(gutils->getNewFromOriginal(MS.getDebugLoc()));
         };
 
-        applyChainRule(Builder2, rule,
+        applyChainRule<ResultType::UNWRAPPED>(Builder2, rule,
                        Gradient(gutils->lookupM(shadow_dst, Builder2)),
-                       Primal(op1l), Primal(op3l), Size(length));
+                       Primal(op1l), Primal(op3l), Primal(length));
       }
 
       if (nextStart == size)
@@ -3412,8 +3412,8 @@ public:
         call->setTailCallKind(MTI.getTailCallKind());
       };
 
-      applyChainRule(Builder2, rule, Gradient(ddst), Gradient(dsrc),
-                     Size(new_size));
+      applyChainRule<ResultType::UNWRAPPED>(Builder2, rule, Gradient(ddst), Gradient(dsrc),
+                     Primal(new_size));
       eraseIfUnused(MTI);
       return;
     }
@@ -3859,7 +3859,7 @@ public:
                 mask);
           };
           auto vec =
-              applyChainRule<true>(orig_ops[1]->getType(), Builder2, rule,
+              applyChainRule<ResultType::UNWRAPPED>(orig_ops[1]->getType(), Builder2, rule,
                                    Gradient(vdiff), Primal(und), Primal(mask));
           addToDiffe(orig_ops[1], vec, Builder2, orig_ops[0]->getType());
         }
@@ -4373,7 +4373,7 @@ public:
           return cal;
         };
 
-        Value *dif = applyChainRule<true>(I.getType(), Builder2, rule,
+        Value *dif = applyChainRule<ResultType::UNWRAPPED>(I.getType(), Builder2, rule,
                                           Gradient(accdif), Gradient(vecdif));
         setDiffe(&I, dif, Builder2);
         return;
@@ -4414,7 +4414,7 @@ public:
                                        dif0);
         };
 
-        Value *dif0 = applyChainRule</*forceScalar*/ true>(
+        Value *dif0 = applyChainRule<ResultType::UNWRAPPED>(
             I.getType(), Builder2, rule, Gradient(op));
         setDiffe(&I, dif0, Builder2);
         return;
@@ -5800,7 +5800,7 @@ public:
 
               Value *ip = gutils->invertPointerM(call.getOperand(1), BuilderZ);
 
-              Value *dval = applyChainRule<true>(
+              Value *dval = applyChainRule<ResultType::UNWRAPPED>(
                   call.getType(), BuilderZ, rule, Gradient(ip), Primal(op0),
                   Primal(op1), Primal(op2), Primal(norm));
               setDiffe(&call, dval, BuilderZ);
@@ -6251,7 +6251,7 @@ public:
             return dres;
           };
 
-          Value *dres = applyChainRule<true>(call.getType(), Builder2, rule,
+          Value *dres = applyChainRule<ResultType::UNWRAPPED>(call.getType(), Builder2, rule,
                                              Gradient(dx), Gradient(dy));
           setDiffe(&call, dres, Builder2);
         }
@@ -6335,7 +6335,7 @@ public:
             }
           };
 
-          applyChainRule<true>(Builder2, rule, Gradient(dx), Gradient(dy),
+          applyChainRule<ResultType::UNWRAPPED>(Builder2, rule, Gradient(dx), Gradient(dy),
                                Gradient(dif));
 
           setDiffe(
@@ -10026,7 +10026,7 @@ public:
                 applyChainRule(
                     BuilderZ,
                     [&](Value *ptrshadow) { iargs.push_back(ptrshadow); },
-                    ptrshadow);
+                    Gradient(ptrshadow));
               }
             }
             if (iargs.size()) {
@@ -10351,7 +10351,7 @@ public:
               return Builder2.CreateCall(called, {vdiff, exp});
             };
 
-            Value *darg = applyChainRule<true>(call.getType(), Builder2, rule,
+            Value *darg = applyChainRule<ResultType::UNWRAPPED>(call.getType(), Builder2, rule,
                                                Gradient(vdiff), Primal(exp));
             setDiffe(orig, darg, Builder2);
             return;
@@ -10368,7 +10368,7 @@ public:
               return Builder2.CreateCall(called, {vdiff, exponent});
             };
             Value *vdiff = diffe(orig, Builder2);
-            Value *darg = applyChainRule<true>(
+            Value *darg = applyChainRule<ResultType::UNWRAPPED>(
                 orig->getArgOperand(0)->getType(), Builder2, rule,
                 Gradient(vdiff), Primal(exponent));
             setDiffe(
@@ -10518,7 +10518,7 @@ public:
                 auto rule = [&]() {
                   return shadowHandlers[funcName.str()](bb, orig, args);
                 };
-                anti = applyChainRule<true>(call.getType(), bb, rule);
+                anti = applyChainRule<ResultType::UNWRAPPED>(call.getType(), bb, rule);
                 if (anti->getType() != placeholder->getType()) {
                   llvm::errs() << "orig: " << *orig << "\n";
                   llvm::errs() << "placeholder: " << *placeholder << "\n";
@@ -10610,7 +10610,7 @@ public:
                 return anti;
               };
 
-              anti = applyChainRule<true>(orig->getType(), bb, rule);
+              anti = applyChainRule<ResultType::UNWRAPPED>(orig->getType(), bb, rule);
 
               gutils->invertedPointers.erase(found);
               if (&*bb.GetInsertPoint() == placeholder)
@@ -11160,7 +11160,7 @@ public:
         return BuilderZ.CreateCall(called, {v});
       };
 
-      Value *val = applyChainRule<true>(call.getType(), BuilderZ, rule,
+      Value *val = applyChainRule<ResultType::UNWRAPPED>(call.getType(), BuilderZ, rule,
                                         Gradient(ptrshadow));
 
       gutils->replaceAWithB(placeholder, val);

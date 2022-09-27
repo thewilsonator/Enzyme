@@ -159,6 +159,13 @@ static bool isPotentialLastLoopValue(Value *val, const BasicBlock *loc,
   return false;
 }
 
+enum class ResultType {
+  // LeafNodeVector mode behaves like scalar mode.
+  WRAPPED = 0,
+  // LeafNodeVector mode behaves lile RootNode vector mode.
+  UNWRAPPED = 1
+};
+
 enum class AugmentedStruct;
 class GradientUtils : public CacheUtility {
 public:
@@ -1947,7 +1954,7 @@ public:
 
   /// Unwraps a vector derivative from its internal representation and applies a
   /// function f to each element. Return values of f are collected and wrapped.
-  template <bool forceScalar = false, typename Func, typename... Args>
+  template <ResultType resTy = ResultType::WRAPPED, typename Func, typename... Args>
   Value *applyChainRule(Type *diffType, IRBuilder<> &Builder, Func rule,
                         Args... args) {
     if (width > 1 && memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode) {
@@ -1958,7 +1965,7 @@ public:
         res = Builder.CreateInsertValue(res, diff, {i});
       }
       return res;
-    } else if (width > 1 && forceScalar && memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes) {
+    } else if (width > 1 && resTy == ResultType::UNWRAPPED && memoryLayout == VectorModeMemoryLayout::VectorizeAtLeafNodes) {
       if (diffType->isVectorTy()) {
         Value *res = nullptr;
         for (unsigned int i = 0; i < width; ++i) {
@@ -1989,10 +1996,10 @@ public:
 
   /// Unwraps a vector derivative from its internal representation and applies a
   /// function f to each element. Return values of f are collected and wrapped.
-  template <bool forceScalar = false, typename Func, typename... Args>
+  template <ResultType resTy = ResultType::WRAPPED, typename Func, typename... Args>
   void applyChainRule(IRBuilder<> &Builder, Func rule, Args... args) {
     
-    if (width > 1 && (forceScalar || memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode)) {
+    if (width > 1 && (resTy == ResultType::UNWRAPPED || memoryLayout == VectorModeMemoryLayout::VectorizeAtRootNode)) {
       for (unsigned int i = 0; i < width; ++i) {
         std::apply(rule, std::move(eval_tuple(Builder, memoryLayout, width, i, args...)));
       }
