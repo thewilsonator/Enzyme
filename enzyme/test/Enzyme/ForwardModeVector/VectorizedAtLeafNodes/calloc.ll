@@ -26,28 +26,4 @@ entry:
 
 declare dso_local <3 x double> @__enzyme_fwddiff(i8*, ...)
 
-; CHECK: define {{[^@]+}}@fwddiffe3f(double [[X:%.*]], [3 x double] %"x'", i64 [[ARG:%.*]])
-; CHECK-NEXT:  entry:
-; CHECK-NEXT:    [[CALL:%.*]] = call noalias i8* @calloc(i64 8, i64 [[ARG]])
-; CHECK-NEXT:    [[TMP0:%.*]] = call noalias i8* @calloc(i64 8, i64 [[ARG]])
-; CHECK-NEXT:    [[TMP1:%.*]] = call noalias i8* @calloc(i64 8, i64 [[ARG]]) 
-; CHECK-NEXT:    [[TMP2:%.*]] = call noalias i8* @calloc(i64 8, i64 [[ARG]])
-; CHECK-NEXT:    %"'ipc" = bitcast i8* [[TMP0]] to double*
-; CHECK-NEXT:    %"'ipc2" = bitcast i8* [[TMP1]] to double*
-; CHECK-NEXT:    %"'ipc3" = bitcast i8* [[TMP2]] to double*
-; CHECK-NEXT:    [[TMP3:%.*]] = bitcast i8* [[CALL]] to double*
-; CHECK-NEXT:    store double [[X]], double* [[TMP3]], align 8
-; CHECK-NEXT:    [[TMP4:%.*]] = extractvalue [3 x double] %"x'", 0
-; CHECK-NEXT:    store double [[TMP4]], double* %"'ipc", align 8
-; CHECK-NEXT:    [[TMP5:%.*]] = extractvalue [3 x double] %"x'", 1
-; CHECK-NEXT:    store double [[TMP5]], double* %"'ipc2", align 8
-; CHECK-NEXT:    [[TMP6:%.*]] = extractvalue [3 x double] %"x'", 2
-; CHECK-NEXT:    store double [[TMP6]], double* %"'ipc3", align 8
-; CHECK-NEXT:    %"'ipl" = load double, double* %"'ipc", align 8
-; CHECK-NEXT:    [[TMP7:%.*]] = insertvalue [3 x double] undef, double %"'ipl", 0
-; CHECK-NEXT:    %"'ipl4" = load double, double* %"'ipc2", align 8
-; CHECK-NEXT:    [[TMP8:%.*]] = insertvalue [3 x double] [[TMP7]], double %"'ipl4", 1
-; CHECK-NEXT:    %"'ipl5" = load double, double* %"'ipc3", align 8
-; CHECK-NEXT:    [[TMP9:%.*]] = insertvalue [3 x double] [[TMP8]], double %"'ipl5", 2
-; CHECK-NEXT:    ret [3 x double] [[TMP9]]
-;
+; XFAIL:

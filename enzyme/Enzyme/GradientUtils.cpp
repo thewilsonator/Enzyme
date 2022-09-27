@@ -149,66 +149,73 @@ SmallVector<unsigned int, 9> MD_ToCopy = {
       mask = lookupM(mask, BuilderM);
 
     size_t idx = 0;
-
-    auto rule = [&](Value *ptr, Value *newval, Value *mask) {
-      if (!mask) {
-        auto ts = BuilderM.CreateStore(newval, ptr);
-        if (align)
+    
+    auto ruleUnmasked = [&](Value *ptr, Value *newval) {
+      auto ts = BuilderM.CreateStore(newval, ptr);
+      if (align)
 #if LLVM_VERSION_MAJOR >= 10
-          ts->setAlignment(*align);
+        ts->setAlignment(*align);
 #else
-          ts->setAlignment(align);
+        ts->setAlignment(align);
 #endif
-        ts->setVolatile(isVolatile);
-        ts->setOrdering(ordering);
-        ts->setSyncScopeID(syncScope);
-        auto scopeMD = getDerivativeAliasScope(origptr, idx);
-        auto scope = MDNode::get(ts->getContext(), scopeMD);
-        ts->setMetadata(LLVMContext::MD_alias_scope, scope);
+      ts->setVolatile(isVolatile);
+      ts->setOrdering(ordering);
+      ts->setSyncScopeID(syncScope);
+      auto scopeMD = getDerivativeAliasScope(origptr, idx);
+      auto scope = MDNode::get(ts->getContext(), scopeMD);
+      ts->setMetadata(LLVMContext::MD_alias_scope, scope);
 
-        ts->setMetadata(LLVMContext::MD_tbaa,
-                        orig->getMetadata(LLVMContext::MD_tbaa));
-        ts->setMetadata(LLVMContext::MD_tbaa_struct,
-                        orig->getMetadata(LLVMContext::MD_tbaa_struct));
-        ts->setDebugLoc(getNewFromOriginal(orig->getDebugLoc()));
+      ts->setMetadata(LLVMContext::MD_tbaa,
+                      orig->getMetadata(LLVMContext::MD_tbaa));
+      ts->setMetadata(LLVMContext::MD_tbaa_struct,
+                      orig->getMetadata(LLVMContext::MD_tbaa_struct));
+      ts->setDebugLoc(getNewFromOriginal(orig->getDebugLoc()));
 
-        SmallVector<Metadata *, 1> MDs;
-        for (ssize_t j = -1; j < getWidth(); j++) {
-          if (j != (ssize_t)idx)
-            MDs.push_back(getDerivativeAliasScope(origptr, j));
-        }
-        if (auto MD = orig->getMetadata(LLVMContext::MD_noalias)) {
-          auto MDN = cast<MDNode>(MD);
-          for (auto &o : MDN->operands())
-            MDs.push_back(o);
-        }
-        auto noscope = MDNode::get(ptr->getContext(), MDs);
-        ts->setMetadata(LLVMContext::MD_noalias, noscope);
-      } else {
-        Type *tys[] = {newval->getType(), ptr->getType()};
-        auto F = Intrinsic::getDeclaration(oldFunc->getParent(),
-                                           Intrinsic::masked_store, tys);
-        assert(align);
-#if LLVM_VERSION_MAJOR >= 10
-        Value *alignv = ConstantInt::get(Type::getInt32Ty(ptr->getContext()),
-                                         align->value());
-#else
-        Value *alignv =
-            ConstantInt::get(Type::getInt32Ty(ptr->getContext()), align);
-#endif
-        Value *args[] = {newval, ptr, alignv, mask};
-        auto ts = BuilderM.CreateCall(F, args);
-        ts->setCallingConv(F->getCallingConv());
-        ts->setMetadata(LLVMContext::MD_tbaa,
-                        orig->getMetadata(LLVMContext::MD_tbaa));
-        ts->setMetadata(LLVMContext::MD_tbaa_struct,
-                        orig->getMetadata(LLVMContext::MD_tbaa_struct));
-        ts->setDebugLoc(getNewFromOriginal(orig->getDebugLoc()));
+      SmallVector<Metadata *, 1> MDs;
+      for (ssize_t j = -1; j < getWidth(); j++) {
+        if (j != (ssize_t)idx)
+          MDs.push_back(getDerivativeAliasScope(origptr, j));
       }
+      if (auto MD = orig->getMetadata(LLVMContext::MD_noalias)) {
+        auto MDN = cast<MDNode>(MD);
+        for (auto &o : MDN->operands())
+          MDs.push_back(o);
+      }
+      auto noscope = MDNode::get(ptr->getContext(), MDs);
+      ts->setMetadata(LLVMContext::MD_noalias, noscope);
+      
       idx++;
     };
+    
+    auto ruleMasked = [&](Value *ptr, Value *newval, Value *mask) {
+      Type *tys[] = {newval->getType(), ptr->getType()};
+      auto F = Intrinsic::getDeclaration(oldFunc->getParent(),
+                                         Intrinsic::masked_store, tys);
+      assert(align);
+#if LLVM_VERSION_MAJOR >= 10
+      Value *alignv = ConstantInt::get(Type::getInt32Ty(ptr->getContext()),
+                                       align->value());
+#else
+      Value *alignv =
+          ConstantInt::get(Type::getInt32Ty(ptr->getContext()), align);
+#endif
+      Value *args[] = {newval, ptr, alignv, mask};
+      auto ts = BuilderM.CreateCall(F, args);
+      ts->setCallingConv(F->getCallingConv());
+      ts->setMetadata(LLVMContext::MD_tbaa,
+                      orig->getMetadata(LLVMContext::MD_tbaa));
+      ts->setMetadata(LLVMContext::MD_tbaa_struct,
+                      orig->getMetadata(LLVMContext::MD_tbaa_struct));
+      ts->setDebugLoc(getNewFromOriginal(orig->getDebugLoc()));
+      
+      idx++;
+    };
+    
+    if (mask)
+      applyChainRule<ResultType::UNWRAPPED>(BuilderM, ruleMasked, Gradient(ptr), Gradient(newval), Primal(mask));
+    else
+      applyChainRule(BuilderM, ruleUnmasked, Gradient(ptr), Gradient(newval));
 
-    applyChainRule<ResultType::UNWRAPPED>(BuilderM, rule, Gradient(ptr), Gradient(newval), Primal(mask));
   }
 
 #if LLVM_VERSION_MAJOR >= 10

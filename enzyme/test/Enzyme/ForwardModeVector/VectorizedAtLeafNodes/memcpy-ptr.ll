@@ -36,9 +36,14 @@ attributes #3 = { nounwind }
 ; CHECK-NEXT:   %"'ipc2" = bitcast <3 x double>** %"src'" to <3 x i8>*
 ; CHECK-NEXT:   %1 = bitcast double** %src to i8*
 ; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 1 %0, i8* align 1 %1, i64 %num, i1 false) #3
-; CHECK-NEXT:   %num.vecsize = mul i64 3, %num
-; CHECK-NEXT:   %2 = bitcast <3 x i8>* %"'ipc" to i8*
-; CHECK-NEXT:   %3 = bitcast <3 x i8>* %"'ipc2" to i8*
-; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 1 %2, i8* align 1 %3, i64 %num.vecsize, i1 false) #3
+; CHECK-NEXT:   %2 = getelementptr inbounds <3 x i8>, <3 x i8>* %"'ipc", i32 0, i32 0
+; CHECK-NEXT:   %3 = getelementptr inbounds <3 x i8>, <3 x i8>* %"'ipc2", i32 0, i32 0
+; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 1 %2, i8* align 1 %3, i64 %num, i1 false) #3
+; CHECK-NEXT:   %4 = getelementptr inbounds <3 x i8>, <3 x i8>* %"'ipc", i32 0, i32 1
+; CHECK-NEXT:   %5 = getelementptr inbounds <3 x i8>, <3 x i8>* %"'ipc2", i32 0, i32 1
+; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 1 %4, i8* align 1 %5, i64 %num, i1 false) #3
+; CHECK-NEXT:   %6 = getelementptr inbounds <3 x i8>, <3 x i8>* %"'ipc", i32 0, i32 2
+; CHECK-NEXT:   %7 = getelementptr inbounds <3 x i8>, <3 x i8>* %"'ipc2", i32 0, i32 2
+; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 1 %6, i8* align 1 %7, i64 %num, i1 false) #3
 ; CHECK-NEXT:   ret void
 ; CHECK-NEXT: }

@@ -30,12 +30,19 @@ attributes #2 = { noinline nounwind uwtable }
 
 ; CHECK: define internal void @fwddiffe3memcpy_float(double* nocapture %dst, <3 x double>* %"dst'", double* nocapture readonly %src, <3 x double>* %"src'", i64 %num)
 ; CHECK-NEXT:  entry:
+; CHECK-NEXT:   %"'ipc" = bitcast <3 x double>* %"dst'" to <3 x i8>*
 ; CHECK-NEXT:   %0 = bitcast double* %dst to i8*
+; CHECK-NEXT:   %"'ipc2" = bitcast <3 x double>* %"src'" to <3 x i8>*
 ; CHECK-NEXT:   %1 = bitcast double* %src to i8*
 ; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 1 %0, i8* align 1 %1, i64 %num, i1 false) #3
-; CHECK-NEXT:   %num.vecsize = mul i64 %num, 3
 ; CHECK-NEXT:   %2 = bitcast <3 x double>* %"dst'" to i8*
 ; CHECK-NEXT:   %3 = bitcast <3 x double>* %"src'" to i8*
-; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 1 %2, i8* align 1 %3, i64 %num.vecsize, i1 false) #3
+; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* align 1 %2, i8* align 1 %3, i64 %num, i1 false) #3
+; CHECK-NEXT:   %4 = getelementptr inbounds <3 x i8>, <3 x i8>* %"'ipc", i64 0, i64 1
+; CHECK-NEXT:   %5 = getelementptr inbounds <3 x i8>, <3 x i8>* %"'ipc2", i64 0, i64 1
+; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* nonnull align 1 %4, i8* nonnull align 1 %5, i64 %num, i1 false) #3
+; CHECK-NEXT:   %6 = getelementptr inbounds <3 x i8>, <3 x i8>* %"'ipc", i64 0, i64 2
+; CHECK-NEXT:   %7 = getelementptr inbounds <3 x i8>, <3 x i8>* %"'ipc2", i64 0, i64 2
+; CHECK-NEXT:   tail call void @llvm.memcpy.p0i8.p0i8.i64(i8* nonnull align 1 %6, i8* nonnull align 1 %7, i64 %num, i1 false) #3
 ; CHECK-NEXT:   ret void
 ; CHECK-NEXT: }
